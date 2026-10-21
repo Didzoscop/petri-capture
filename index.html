@@ -48,6 +48,7 @@ header{
   background:var(--surface);border-bottom:1px solid var(--line);flex-wrap:wrap;
 }
 header h1{font-size:1.05rem;margin:0 auto 0 .25rem;font-weight:700;white-space:nowrap}
+.ver{font-size:.72rem;color:var(--muted);font-variant-numeric:tabular-nums;white-space:nowrap}
 .btn{
   border:1px solid var(--line);background:var(--surface-2);border-radius:10px;
   padding:.55rem .9rem;min-height:44px;display:inline-flex;align-items:center;gap:.4rem;
@@ -83,6 +84,22 @@ svg#overlay{position:absolute;inset:0;width:100%;height:100%;touch-action:none}
 .status .actions{margin-left:auto;display:flex;gap:.5rem;flex-wrap:wrap;justify-content:flex-end}
 .status .btn{background:rgba(255,255,255,.1);border-color:rgba(255,255,255,.25);color:#F2F7F6}
 .status .btn.primary{background:#F2F7F6;color:#0B1D22;border-color:#F2F7F6}
+/* Téléphone : en-tête compact, bandeau d'état sous l'image plutôt que par-dessus */
+@media (max-width:640px){
+  header{gap:.35rem;padding:.4rem .5rem}
+  header h1{display:none}
+  header .ver{margin-right:auto}
+  header{flex-wrap:nowrap}
+  header .btn{padding:.35rem .55rem;min-height:40px;font-size:.9rem}
+  .status{flex-wrap:wrap;gap:.5rem .8rem;padding:.7rem .9rem}
+  .status .dot{width:22px;height:22px}
+  .status .txt{flex:1}
+  .status .actions{margin-left:0;width:100%}
+  .status .actions .btn{flex:1;justify-content:center}
+}
+@media (orientation:portrait){
+  video, svg#overlay, .flash{height:calc(100% - var(--sb,0px))}
+}
 .status[data-tone="ok"]{border-top-color:var(--ok)} .status[data-tone="ok"] .dot{background:var(--ok)}
 .status[data-tone="err"]{border-top-color:var(--err)} .status[data-tone="err"] .dot{background:var(--err)}
 .status[data-tone="idle"]{border-top-color:#6E8C90} .status[data-tone="idle"] .dot{background:#6E8C90}
@@ -96,6 +113,8 @@ svg#overlay{position:absolute;inset:0;width:100%;height:100%;touch-action:none}
   font-variant-numeric:tabular-nums;pointer-events:none
 }
 .meters b{font-weight:700;text-align:right}
+.btn.lens{position:absolute;top:.6rem;right:.6rem;background:rgba(6,17,20,.7);color:#F2F7F6;border-color:rgba(255,255,255,.25)}
+.btn.lens[hidden]{display:none}
 .meters.hidden{display:none}
 
 /* Panneaux latéraux */
@@ -158,6 +177,7 @@ select{width:100%;min-height:44px;border:1px solid var(--line);border-radius:10p
 <body>
 
 <header>
+  <span class="ver" id="ver"></span>
   <h1>Capture des boîtes de Petri</h1>
   <button class="btn" id="btnCalib" type="button">Calibrer</button>
   <button class="btn" id="btnPhotos" type="button">Photos <span class="count" id="countBadge">0</span></button>
@@ -170,6 +190,7 @@ select{width:100%;min-height:44px;border:1px solid var(--line);border-radius:10p
     <video id="video" playsinline muted autoplay></video>
     <svg id="overlay" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid meet"></svg>
     <div class="flash" id="flash"></div>
+    <button class="btn lens" id="btnLens" type="button" hidden>Objectif</button>
     <div class="meters" id="meters">
       <span>Boîte</span><b id="mDish">–</b>
       <span>Couvercle</span><b id="mLid">–</b>
@@ -263,6 +284,8 @@ select{width:100%;min-height:44px;border:1px solid var(--line);border-radius:10p
 (() => {
 'use strict';
 const $ = id => document.getElementById(id);
+const APP_VERSION = 'v4 · 22/10'; // à incrémenter à chaque publication
+$('ver').textContent = APP_VERSION;
 const video = $('video'), svg = $('overlay');
 const SVGNS = 'http://www.w3.org/2000/svg';
 
@@ -273,7 +296,8 @@ const store = {
   set(k, v){ try{ localStorage.setItem(k, JSON.stringify(v)); }catch(e){} }
 };
 const settings = Object.assign({}, DEFAULTS, store.get('petri.settings', {}));
-let calib = store.get('petri.calib', null); // {dish:{x,y,r}, lid:{x,y,r}, aspect}
+const calibKey = () => 'petri.calib' + (settings.deviceId ? '.' + settings.deviceId : '');
+let calib = store.get(calibKey(), store.get('petri.calib', null)); // {dish:{x,y,r}, lid:{x,y,r}, aspect}, un par objectif
 
 /* ---------- État ---------- */
 let stream = null, track = null, W = 0, H = 0;
@@ -281,7 +305,7 @@ let mode = 'start'; // start | calib | run
 let state = 'idle'; // idle | empty | settling | focusing | saving | wait_removal
 let tSince = 0, tFocus = 0, tEmptySince = 0, bestSharp = 0, lastMsg = null;
 let ref = null, prevL = null, refPending = false;
-let focusLocked = false, lockSharp = 0, goodSharp = 0, lockVerify = false, refreshRef = false, focusDur = 0;
+let focusLocked = false, lockSharp = 0, verifyN = 0, verifyMax = 0, lockVerify = false, refreshRef = false, focusDur = 0;
 let snap = null, tSwap = 0;
 let tRetry = 0, failStreak = 0; // nouvel essai automatique après un échec // image de la boîte photographiée, pour repérer son remplacement
 let aw = 160, ah = 90, idxDish = null, idxLid = null, idxOut = null;
@@ -368,7 +392,7 @@ async function startCamera(){
   }
   try{
     if (stream) stream.getTracks().forEach(t => t.stop());
-    focusLocked = false; lockVerify = false; refreshRef = false; goodSharp = 0; // nouvelle caméra : nouvelle mise au point
+    focusLocked = false; lockVerify = false; refreshRef = false; // nouvelle caméra : nouvelle mise au point
     const v = { width:{ ideal:3840 }, height:{ ideal:2160 } };
     if (settings.deviceId) v.deviceId = { exact: settings.deviceId }; else v.facingMode = { ideal:'environment' };
     try{ stream = await navigator.mediaDevices.getUserMedia({ video:v, audio:false }); }
@@ -404,9 +428,14 @@ async function startCamera(){
 }
 function showStartError(msg){ $('start').classList.remove('hidden'); const b = $('startError'); b.textContent = msg; b.classList.add('show'); }
 
+let lenses = [];
 async function listCameras(){
   try{
     const devs = (await navigator.mediaDevices.enumerateDevices()).filter(d => d.kind === 'videoinput');
+    // objectifs arrière en priorité pour le bouton « Objectif »
+    const back = devs.filter(d => /back|rear|arri[eè]re|environment|t[eé]l[eé]|ultra|wide|grand/i.test(d.label) && !/front|avant|facetime/i.test(d.label));
+    lenses = back.length >= 2 ? back : devs;
+    $('btnLens').hidden = lenses.length < 2;
     const sel = $('camSelect'); sel.innerHTML = '';
     const cur = track && track.getSettings ? track.getSettings().deviceId : '';
     devs.forEach((d, i) => {
@@ -440,6 +469,7 @@ document.addEventListener('visibilitychange', () => { if (document.visibilitySta
 
 /* ---------- Cercles : géométrie ---------- */
 function defaultCalib(){
+  if (H > W) return { dish:{ x:.5, y:.33, r:.42 }, lid:{ x:.5, y:.77, r:.3 }, aspect: W/H }; // portrait : l'un sous l'autre
   return { dish:{ x:.36, y:.5, r:.34 }, lid:{ x:.76, y:.5, r:.24 }, aspect: W/H };
 }
 const mn = () => Math.min(W, H);
@@ -518,12 +548,12 @@ svg.addEventListener('pointermove', ev => {
   }
   drawOverlay();
 });
-const endDrag = ev => { if (drag && ev.pointerId === drag.id){ drag = null; store.set('petri.calib', calib); } };
+const endDrag = ev => { if (drag && ev.pointerId === drag.id){ drag = null; store.set(calibKey(), calib); } };
 svg.addEventListener('pointerup', endDrag); svg.addEventListener('pointercancel', endDrag);
 
 /* ---------- Modes ---------- */
 function enterCalib(reason){
-  unlockFocus(); goodSharp = 0;
+  unlockFocus();
   mode = 'calib'; state = 'idle'; ref = null;
   if (!calib || Math.abs(calib.aspect - W/H) > 0.02) calib = defaultCalib();
   drawOverlay();
@@ -532,7 +562,7 @@ function enterCalib(reason){
     [{ label:'Valider (socle vide)', primary:true, fn: () => startRun(false) }]);
 }
 async function startRun(silent){
-  calib.aspect = W/H; store.set('petri.calib', calib);
+  calib.aspect = W/H; store.set(calibKey(), calib);
   buildMasks(); mode = 'run';
   await takeReference();
   state = 'empty'; lastMsg = null; drawOverlay();
@@ -667,7 +697,8 @@ function loop(){
           break;
         }
         // double contrôle : avec la mise au point verrouillée, l'image doit rester aussi nette qu'à la première photo
-        if (focusLocked && bestSharp < lockSharp*.6){ unlockFocus(); toast('Image moins nette : nouvelle mise au point.'); beginFocus(now); break; }
+        // (la netteté dépend du contenu de chaque boîte : on ne refait la mise au point que pour une image vraiment floue)
+        if (focusLocked){ const m = medianSharp(); if (m > 0 && bestSharp < m*.45){ unlockFocus(); toast('Image floue : nouvelle mise au point.'); beginFocus(now); break; } }
         if (settings.requireLid && a.fLid < P*.5){ fail('Couvercle non détecté', "Placez le couvercle dans son cercle, numéro visible."); break; }
         const med = medianSharp();
         if (!focusLocked && settings.sharpCheck && med > 0 && bestSharp < med*.45){ fail('Image floue', 'Netteté ' + Math.round(bestSharp) + ' pour ' + Math.round(med) + ' habituellement.'); break; }
@@ -681,11 +712,14 @@ function loop(){
         setStatus('busy', 'Nouvel essai…', 'Ne bougez plus…', runActions()); }
       break;
     case 'wait_removal': {
+      // vérifie sur la même boîte, et sur plusieurs images, que le verrouillage n'a pas dégradé la netteté
       if (lockVerify && a.fDish >= P*.5 && a.motion < MOTION_T){
-        lockVerify = false;
-        const s = sharpness();
-        if (s < lockSharp*.6){ unlockFocus(); toast('Le verrouillage de la mise au point a échoué, autofocus conservé.'); }
-        else toast('Mise au point verrouillée pour les prochaines boîtes.');
+        verifyMax = Math.max(verifyMax, sharpness());
+        if (++verifyN >= 5){
+          lockVerify = false;
+          if (verifyMax < lockSharp*.5){ unlockFocus(); toast('Le verrouillage de la mise au point a échoué, autofocus conservé.'); }
+          else toast('Mise au point verrouillée pour les prochaines boîtes.');
+        }
       }
       if (a.fDish < P*.5){ if (!tEmptySince) tEmptySince = now; if (now - tEmptySince > 600){ snap = null; toEmpty(); } break; }
       tEmptySince = 0;
@@ -700,13 +734,13 @@ function loop(){
   }
 }
 function toEmpty(){
-  failStreak = 0;
+  failStreak = 0; lockVerify = false;
   // premier socle vide après le verrouillage : on reprend le fond avec la nouvelle mise au point
   if (refreshRef){ refreshRef = false; takeReference().then(toEmpty); return; }
   state = 'empty'; tEmptySince = 0; drawOverlay();
   setStatus('wait', 'Prêt', placeMsg(), runActions());
 }
-const QUICK_MS = 400;
+const QUICK_MS = 500;
 async function beginFocus(now){
   state = 'focusing'; tFocus = now; bestSharp = -1; drawOverlay();
   focusDur = focusLocked ? QUICK_MS : settings.focusMs;
@@ -727,7 +761,7 @@ async function restoreFocus(){
   }catch(e){}
 }
 async function lockFocus(sharp){
-  focusLocked = true; lockSharp = goodSharp = sharp; lockVerify = true; refreshRef = true;
+  focusLocked = true; lockSharp = sharp; verifyN = 0; verifyMax = 0; lockVerify = true; refreshRef = true;
   try{
     const caps = track.getCapabilities ? track.getCapabilities() : {}, cur = track.getSettings ? track.getSettings() : {};
     if (caps.focusMode && caps.focusMode.includes('manual') && cur.focusDistance !== undefined)
@@ -741,9 +775,7 @@ function unlockFocus(){
 }
 function afterShot(ok){
   if (ok && settings.lockFocus){
-    // pas de reverrouillage sur une image nettement moins nette que lors du dernier verrouillage
-    if (!focusLocked){ if (!goodSharp || bestSharp >= goodSharp*.6) lockFocus(bestSharp); }
-    else lockSharp = lockSharp*.7 + bestSharp*.3;
+    if (!focusLocked) lockFocus(bestSharp);
   }
   if (!focusLocked) restoreFocus();
 }
@@ -888,7 +920,19 @@ bindCheck('cMeters', 'meters', () => $('meters').classList.toggle('hidden', !set
 $('meters').classList.toggle('hidden', !settings.meters);
 $('tOk').addEventListener('click', () => { initAudio(); const s = settings.sound; settings.sound = true; sounds.ok(); settings.sound = s; });
 $('tErr').addEventListener('click', () => { initAudio(); const s = settings.sound; settings.sound = true; sounds.err(); settings.sound = s; });
-$('camSelect').addEventListener('change', e => { settings.deviceId = e.target.value; store.set('petri.settings', settings); startCamera(); });
+function useCamera(id, label){
+  settings.deviceId = id; store.set('petri.settings', settings);
+  calib = store.get(calibKey(), null);
+  if (label) toast('Objectif : ' + label + (calib ? '' : '. Placez les cercles pour cet objectif.'));
+  startCamera();
+}
+$('camSelect').addEventListener('change', e => useCamera(e.target.value));
+$('btnLens').addEventListener('click', () => {
+  if (lenses.length < 2) return;
+  const cur = track && track.getSettings ? track.getSettings().deviceId : settings.deviceId;
+  const i = lenses.findIndex(d => d.deviceId === cur), next = lenses[(i + 1) % lenses.length];
+  useCamera(next.deviceId, next.label || ('Caméra ' + ((i + 1) % lenses.length + 1)));
+});
 $('btnRef').addEventListener('click', async () => { if (mode !== 'run') return; closeSheets(); await takeReference(); toEmpty(); toast('Fond vide mis à jour.'); });
 $('btnCalib2').addEventListener('click', () => { closeSheets(); if (stream) enterCalib(); });
 
@@ -910,6 +954,8 @@ document.addEventListener('keydown', e => {
   }
 });
 document.addEventListener('pointerdown', initAudio, { once:true });
+// hauteur du bandeau d'état, pour placer l'image au-dessus en portrait
+if (window.ResizeObserver) new ResizeObserver(() => document.documentElement.style.setProperty('--sb', $('status').offsetHeight + 'px')).observe($('status'));
 refreshCount();
 })();
 </script>
