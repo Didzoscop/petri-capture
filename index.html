@@ -1,0 +1,822 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Capture des boîtes de Petri</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<style>
+:root{
+  --bg:#E9F0EE; --surface:#FFFFFF; --surface-2:#F3F7F6; --text:#12262C; --muted:#4F6A70;
+  --line:#C9D8D5; --accent:#1F6F78; --accent-text:#FFFFFF;
+  --wait:#E3A82B; --ok:#1E9E5E; --err:#D9433D; --viewer:#061114;
+  --dish:#5FD3A3; --lid:#7FB8FF;
+  color-scheme: light;
+  box-sizing:border-box;
+  padding-top:env(safe-area-inset-top,0px);
+  padding-bottom:env(safe-area-inset-bottom,0px);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0B1D22; --surface:#132E35; --surface-2:#18383F; --text:#E4EFED; --muted:#9DB6B9;
+    --line:#26474F; --accent:#4FB3BC; --accent-text:#06191C;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0B1D22; --surface:#132E35; --surface-2:#18383F; --text:#E4EFED; --muted:#9DB6B9;
+  --line:#26474F; --accent:#4FB3BC; --accent-text:#06191C;
+  color-scheme: dark;
+}
+*,*::before,*::after{box-sizing:inherit}
+html{height:100%;scroll-padding-top:env(safe-area-inset-top,0px)}
+body{
+  height:100%;margin:0;background:var(--bg);color:var(--text);
+  font-family:"Atkinson Hyperlegible",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  font-size:17px;line-height:1.45;-webkit-tap-highlight-color:transparent;
+  display:grid;grid-template-rows:auto 1fr;overflow:hidden;
+}
+button,select,input{font:inherit;color:inherit}
+button{cursor:pointer}
+:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+
+header{
+  display:flex;align-items:center;gap:.5rem;padding:.5rem .75rem;
+  background:var(--surface);border-bottom:1px solid var(--line);flex-wrap:wrap;
+}
+header h1{font-size:1.05rem;margin:0 auto 0 .25rem;font-weight:700;white-space:nowrap}
+.btn{
+  border:1px solid var(--line);background:var(--surface-2);border-radius:10px;
+  padding:.55rem .9rem;min-height:44px;display:inline-flex;align-items:center;gap:.4rem;
+}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-text);font-weight:700}
+.btn.danger{color:var(--err);border-color:color-mix(in srgb,var(--err) 45%,var(--line))}
+.btn[disabled]{opacity:.45;cursor:default}
+.count{
+  font-variant-numeric:tabular-nums;background:var(--accent);color:var(--accent-text);
+  border-radius:999px;padding:0 .5rem;font-size:.85rem;font-weight:700;min-width:1.6rem;text-align:center
+}
+
+main{position:relative;min-height:0}
+.viewer{position:absolute;inset:0;background:var(--viewer);overflow:hidden}
+video{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;background:var(--viewer)}
+svg#overlay{position:absolute;inset:0;width:100%;height:100%;touch-action:none}
+.flash{position:absolute;inset:0;pointer-events:none;opacity:0}
+.flash.go{animation:flash .8s ease-out}
+@keyframes flash{0%{opacity:.55}100%{opacity:0}}
+@media (prefers-reduced-motion: reduce){.flash.go{animation-duration:.35s}}
+
+/* Bandeau d'état : lisible à distance, sous la hotte */
+.status{
+  position:absolute;left:0;right:0;bottom:0;
+  display:flex;align-items:center;gap:1rem;padding:1rem 1.25rem;
+  background:rgba(6,17,20,.82);color:#F2F7F6;border-top:6px solid var(--wait);
+  backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);
+}
+.status .dot{width:clamp(28px,4vw,46px);height:clamp(28px,4vw,46px);border-radius:50%;background:var(--wait);flex:none}
+.status .txt{display:flex;flex-direction:column;min-width:0}
+.status .big{font-size:clamp(1.35rem,3.4vw,2.5rem);font-weight:700;line-height:1.15}
+.status .small{font-size:clamp(.95rem,1.7vw,1.2rem);color:#C4D6D6}
+.status .actions{margin-left:auto;display:flex;gap:.5rem;flex-wrap:wrap;justify-content:flex-end}
+.status .btn{background:rgba(255,255,255,.1);border-color:rgba(255,255,255,.25);color:#F2F7F6}
+.status .btn.primary{background:#F2F7F6;color:#0B1D22;border-color:#F2F7F6}
+.status[data-tone="ok"]{border-top-color:var(--ok)} .status[data-tone="ok"] .dot{background:var(--ok)}
+.status[data-tone="err"]{border-top-color:var(--err)} .status[data-tone="err"] .dot{background:var(--err)}
+.status[data-tone="idle"]{border-top-color:#6E8C90} .status[data-tone="idle"] .dot{background:#6E8C90}
+.status[data-tone="busy"] .dot{animation:pulse 1s ease-in-out infinite}
+@keyframes pulse{50%{transform:scale(.7);opacity:.6}}
+@media (prefers-reduced-motion: reduce){.status[data-tone="busy"] .dot{animation:none}}
+
+.meters{
+  position:absolute;top:.6rem;left:.6rem;display:grid;grid-template-columns:auto auto;gap:.15rem .7rem;
+  background:rgba(6,17,20,.7);color:#DDEBEA;border-radius:8px;padding:.45rem .7rem;font-size:.85rem;
+  font-variant-numeric:tabular-nums;pointer-events:none
+}
+.meters b{font-weight:700;text-align:right}
+.meters.hidden{display:none}
+
+/* Panneaux latéraux */
+.sheet{
+  position:fixed;top:0;right:0;bottom:0;width:min(440px,100%);background:var(--surface);
+  border-left:1px solid var(--line);z-index:20;display:flex;flex-direction:column;
+  transform:translateX(105%);transition:transform .25s ease;
+  padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);
+}
+.sheet.open{transform:none}
+@media (prefers-reduced-motion: reduce){.sheet{transition:none}}
+.sheet-head{display:flex;align-items:center;gap:.5rem;padding:.75rem 1rem;border-bottom:1px solid var(--line)}
+.sheet-head h2{margin:0 auto 0 0;font-size:1.15rem}
+.sheet-body{overflow:auto;padding:1rem;flex:1}
+.sheet-foot{padding:.75rem 1rem;border-top:1px solid var(--line);display:flex;gap:.5rem;flex-wrap:wrap}
+.scrim{position:fixed;inset:0;background:rgba(0,0,0,.35);z-index:15;display:none}
+.scrim.open{display:block}
+
+.field{margin-bottom:1.1rem}
+.field label{display:flex;justify-content:space-between;gap:1rem;font-weight:700;margin-bottom:.25rem}
+.field label span{font-weight:400;color:var(--muted);font-variant-numeric:tabular-nums}
+.field p{margin:.2rem 0 0;color:var(--muted);font-size:.9rem}
+input[type=range]{width:100%;accent-color:var(--accent);min-height:36px}
+.check{display:flex;align-items:center;gap:.6rem;margin-bottom:.8rem;min-height:36px}
+.check input{width:22px;height:22px;accent-color:var(--accent)}
+select{width:100%;min-height:44px;border:1px solid var(--line);border-radius:10px;background:var(--surface-2);padding:0 .6rem}
+.group-title{font-size:.95rem;color:var(--muted);margin:1.4rem 0 .6rem;font-weight:700}
+.row{display:flex;gap:.5rem;flex-wrap:wrap}
+
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:.6rem}
+.thumb{border:1px solid var(--line);border-radius:10px;overflow:hidden;background:var(--surface-2);position:relative}
+.thumb img{display:block;width:100%;aspect-ratio:2/1;object-fit:cover;background:#000}
+.thumb .meta{padding:.3rem .45rem;font-size:.78rem;font-variant-numeric:tabular-nums;display:flex;justify-content:space-between;align-items:center;gap:.25rem}
+.thumb .tag{font-size:.7rem;color:var(--ok);font-weight:700}
+.thumb button{border:none;background:none;color:var(--err);font-size:1.05rem;padding:.1rem .3rem;min-height:30px}
+.empty{color:var(--muted);text-align:center;padding:2rem 1rem}
+.note{font-size:.9rem;color:var(--muted);margin:.25rem 0 0;width:100%}
+
+/* Écran d'accueil */
+.start{
+  position:fixed;inset:0;z-index:30;background:var(--bg);display:grid;place-items:center;padding:1.5rem;
+  padding-top:calc(1.5rem + env(safe-area-inset-top,0px));padding-bottom:calc(1.5rem + env(safe-area-inset-bottom,0px));
+}
+.start.hidden{display:none}
+.start-card{max-width:34rem}
+.start h2{font-size:clamp(1.7rem,4vw,2.4rem);line-height:1.1;margin:0 0 .8rem}
+.start p{margin:0 0 .8rem;color:var(--muted)}
+.start ol{padding-left:1.2rem;margin:0 0 1.4rem}
+.start li{margin-bottom:.35rem}
+.start .btn.primary{font-size:1.15rem;padding:.8rem 1.4rem}
+.error-box{margin-top:1rem;padding:.8rem 1rem;border-radius:10px;border:1px solid var(--err);color:var(--text);display:none}
+.error-box.show{display:block}
+.toast{
+  position:fixed;left:50%;bottom:calc(1rem + env(safe-area-inset-bottom,0px));transform:translateX(-50%);
+  background:var(--text);color:var(--bg);padding:.6rem 1rem;border-radius:10px;z-index:40;display:none;max-width:90vw
+}
+.toast.show{display:block}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Capture des boîtes de Petri</h1>
+  <button class="btn" id="btnCalib" type="button">Calibrer</button>
+  <button class="btn" id="btnPhotos" type="button">Photos <span class="count" id="countBadge">0</span></button>
+  <button class="btn" id="btnSettings" type="button">Réglages</button>
+  <button class="btn" id="btnFull" type="button" aria-label="Plein écran">⛶</button>
+</header>
+
+<main>
+  <div class="viewer" id="viewer">
+    <video id="video" playsinline muted autoplay></video>
+    <svg id="overlay" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid meet"></svg>
+    <div class="flash" id="flash"></div>
+    <div class="meters" id="meters">
+      <span>Boîte</span><b id="mDish">–</b>
+      <span>Couvercle</span><b id="mLid">–</b>
+      <span>Mouvement</span><b id="mMotion">–</b>
+      <span>Netteté</span><b id="mSharp">–</b>
+    </div>
+    <div class="status" id="status" data-tone="idle">
+      <div class="dot"></div>
+      <div class="txt"><span class="big" id="stBig">En attente</span><span class="small" id="stSmall"></span></div>
+      <div class="actions" id="stActions"></div>
+    </div>
+  </div>
+</main>
+
+<div class="scrim" id="scrim"></div>
+
+<aside class="sheet" id="sheetPhotos" aria-label="Photos enregistrées">
+  <div class="sheet-head"><h2>Photos enregistrées</h2><button class="btn" data-close type="button">Fermer</button></div>
+  <div class="sheet-body"><div class="grid" id="grid"></div></div>
+  <div class="sheet-foot">
+    <button class="btn primary" id="btnShare" type="button">Enregistrer dans la galerie</button>
+    <button class="btn" id="btnZip" type="button">Télécharger en .zip</button>
+    <button class="btn danger" id="btnClearExported" type="button">Supprimer les photos exportées</button>
+    <p class="note" id="exportNote">Les photos restent dans l'app tant que vous ne les supprimez pas.</p>
+  </div>
+</aside>
+
+<aside class="sheet" id="sheetSettings" aria-label="Réglages">
+  <div class="sheet-head"><h2>Réglages</h2><button class="btn" data-close type="button">Fermer</button></div>
+  <div class="sheet-body">
+    <div class="group-title">Détection</div>
+    <div class="field">
+      <label for="sSens">Seuil de différence <span id="vSens"></span></label>
+      <input type="range" id="sSens" min="6" max="60" step="1">
+      <p>Plus bas, l'app réagit à de plus petits changements par rapport au socle vide.</p>
+    </div>
+    <div class="field">
+      <label for="sPresence">Surface occupée pour détecter <span id="vPresence"></span></label>
+      <input type="range" id="sPresence" min="5" max="70" step="1">
+      <p>Part du cercle « Boîte » qui doit changer. Regardez la mesure « Boîte » avec une boîte posée pour régler.</p>
+    </div>
+    <div class="field">
+      <label for="sStable">Attente après détection <span id="vStable"></span></label>
+      <input type="range" id="sStable" min="300" max="4000" step="100">
+    </div>
+    <div class="field">
+      <label for="sFocus">Durée de mise au point <span id="vFocus"></span></label>
+      <input type="range" id="sFocus" min="500" max="4000" step="100">
+      <p>L'app garde l'image la plus nette obtenue pendant cette durée.</p>
+    </div>
+
+    <div class="group-title">Contrôles</div>
+    <label class="check"><input type="checkbox" id="cLid"> Exiger le couvercle dans son cercle</label>
+    <label class="check"><input type="checkbox" id="cSharp"> Refuser les images floues</label>
+    <label class="check"><input type="checkbox" id="cMeters"> Afficher les mesures</label>
+    <label class="check"><input type="checkbox" id="cSound"> Sons</label>
+    <div class="row"><button class="btn" id="tOk" type="button">Tester le son de réussite</button><button class="btn" id="tErr" type="button">Tester le son d'erreur</button></div>
+
+    <div class="group-title">Caméra</div>
+    <div class="field"><select id="camSelect" aria-label="Caméra"></select><p id="camInfo"></p></div>
+    <div class="row">
+      <button class="btn" id="btnRef" type="button">Reprendre le fond vide</button>
+      <button class="btn" id="btnCalib2" type="button">Recalibrer les cercles</button>
+    </div>
+  </div>
+</aside>
+
+<section class="start" id="start">
+  <div class="start-card">
+    <h2>Photographier les boîtes sans toucher l'écran</h2>
+    <p>Fixez l'appareil sur son support, caméra arrière vers le socle.</p>
+    <ol>
+      <li>Placez les deux cercles : la boîte ouverte et son couvercle.</li>
+      <li>Validez avec le socle vide.</li>
+      <li>Posez chaque boîte : la photo part toute seule, un bip confirme.</li>
+    </ol>
+    <button class="btn primary" id="btnStart" type="button">Démarrer la caméra</button>
+    <div class="error-box" id="startError"></div>
+  </div>
+</section>
+
+<div class="toast" id="toast" role="status"></div>
+
+<script>
+(() => {
+'use strict';
+const $ = id => document.getElementById(id);
+const video = $('video'), svg = $('overlay');
+const SVGNS = 'http://www.w3.org/2000/svg';
+
+/* ---------- Réglages persistants ---------- */
+const DEFAULTS = { sens:20, presence:20, stableMs:1000, focusMs:1500, requireLid:true, sharpCheck:true, meters:true, sound:true, deviceId:'' };
+const store = {
+  get(k, d){ try{ const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; }catch(e){ return d; } },
+  set(k, v){ try{ localStorage.setItem(k, JSON.stringify(v)); }catch(e){} }
+};
+const settings = Object.assign({}, DEFAULTS, store.get('petri.settings', {}));
+let calib = store.get('petri.calib', null); // {dish:{x,y,r}, lid:{x,y,r}, aspect}
+
+/* ---------- État ---------- */
+let stream = null, track = null, W = 0, H = 0;
+let mode = 'start'; // start | calib | run
+let state = 'idle'; // idle | empty | settling | focusing | saving | wait_removal
+let tSince = 0, tFocus = 0, tEmptySince = 0, bestSharp = 0, lastMsg = null;
+let ref = null, prevL = null, refPending = false;
+let aw = 160, ah = 90, idxDish = null, idxLid = null, idxOut = null;
+const acv = document.createElement('canvas'), actx = acv.getContext('2d', { willReadFrequently:true });
+const scv = document.createElement('canvas'), sctx = scv.getContext('2d', { willReadFrequently:true });
+const bestCv = document.createElement('canvas'), bestCtx = bestCv.getContext('2d');
+let sharpHistory = store.get('petri.sharp', []);
+let wakeLock = null, loopTimer = null;
+
+/* ---------- Sons ---------- */
+let audio = null;
+function initAudio(){
+  if (!audio){ try{ audio = new (window.AudioContext || window.webkitAudioContext)(); }catch(e){} }
+  if (audio && audio.state === 'suspended') audio.resume();
+}
+function tone(freq, start, dur, type, vol){
+  if (!audio) return;
+  const t = audio.currentTime + start, o = audio.createOscillator(), g = audio.createGain();
+  o.type = type || 'sine'; o.frequency.value = freq;
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.exponentialRampToValueAtTime(vol || 0.35, t + 0.015);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+  o.connect(g).connect(audio.destination); o.start(t); o.stop(t + dur + 0.05);
+}
+const sounds = {
+  ok(){ if(!settings.sound) return; tone(880,0,.14,'sine',.4); tone(1320,.15,.22,'sine',.4); },
+  err(){ if(!settings.sound) return; tone(220,0,.25,'square',.22); tone(165,.32,.4,'square',.22); try{navigator.vibrate&&navigator.vibrate([200,100,200]);}catch(e){} },
+  tick(){ if(!settings.sound) return; tone(660,0,.06,'triangle',.15); }
+};
+
+/* ---------- Stockage des photos (IndexedDB) ---------- */
+let dbp = null;
+function db(){
+  if (dbp) return dbp;
+  dbp = new Promise((res, rej) => {
+    const r = indexedDB.open('petri-capture', 1);
+    r.onupgradeneeded = () => r.result.createObjectStore('photos', { keyPath:'id' });
+    r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error);
+  });
+  return dbp;
+}
+async function tx(modeRW, fn){
+  const d = await db();
+  return new Promise((res, rej) => {
+    const t = d.transaction('photos', modeRW), s = t.objectStore('photos');
+    const out = fn(s);
+    t.oncomplete = () => res(out && out.result !== undefined ? out.result : out);
+    t.onerror = () => rej(t.error); t.onabort = () => rej(t.error || new Error('abandon'));
+  });
+}
+const photoPut = rec => tx('readwrite', s => s.put(rec));
+const photoDel = id => tx('readwrite', s => s.delete(id));
+const photoAll = () => tx('readonly', s => s.getAll());
+const photoCount = () => tx('readonly', s => s.count());
+async function refreshCount(){ try{ $('countBadge').textContent = await photoCount(); }catch(e){} }
+
+/* ---------- Interface d'état ---------- */
+function setStatus(tone, big, small, actions){
+  const st = $('status');
+  st.dataset.tone = tone; $('stBig').textContent = big; $('stSmall').textContent = small || '';
+  const box = $('stActions'); box.innerHTML = '';
+  (actions || []).forEach(a => {
+    const b = document.createElement('button');
+    b.type = 'button'; b.className = 'btn' + (a.primary ? ' primary' : ''); b.textContent = a.label;
+    b.addEventListener('click', a.fn); box.appendChild(b);
+  });
+}
+function flash(color){
+  const f = $('flash'); f.style.background = color; f.classList.remove('go'); void f.offsetWidth; f.classList.add('go');
+}
+let toastT = null;
+function toast(msg){
+  const t = $('toast'); t.textContent = msg; t.classList.add('show');
+  clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove('show'), 3500);
+}
+const runActions = () => [{ label:'Prendre la photo maintenant', fn: manualCapture }];
+
+/* ---------- Caméra ---------- */
+async function startCamera(){
+  const err = $('startError'); err.classList.remove('show');
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
+    showStartError("Ce navigateur ne donne pas accès à la caméra. La page doit être ouverte en HTTPS, dans Safari ou Chrome.");
+    return;
+  }
+  try{
+    if (stream) stream.getTracks().forEach(t => t.stop());
+    const v = { width:{ ideal:3840 }, height:{ ideal:2160 } };
+    if (settings.deviceId) v.deviceId = { exact: settings.deviceId }; else v.facingMode = { ideal:'environment' };
+    try{ stream = await navigator.mediaDevices.getUserMedia({ video:v, audio:false }); }
+    catch(e){
+      if (settings.deviceId && (e.name === 'OverconstrainedError' || e.name === 'NotFoundError')){
+        settings.deviceId = ''; store.set('petri.settings', settings);
+        stream = await navigator.mediaDevices.getUserMedia({ video:{ facingMode:{ ideal:'environment' }, width:{ideal:3840}, height:{ideal:2160} }, audio:false });
+      } else throw e;
+    }
+    track = stream.getVideoTracks()[0];
+    video.srcObject = stream;
+    await video.play().catch(() => {});
+    await new Promise(r => { if (video.videoWidth) r(); else video.onloadedmetadata = () => r(); });
+    try{
+      const caps = track.getCapabilities ? track.getCapabilities() : {};
+      if (caps.focusMode && caps.focusMode.includes('continuous')) await track.applyConstraints({ advanced:[{ focusMode:'continuous' }] });
+    }catch(e){}
+    onVideoSize();
+    $('start').classList.add('hidden');
+    listCameras();
+    requestWake();
+    if (calib && Math.abs(calib.aspect - W/H) < 0.02) startRun(true);
+    else enterCalib(calib ? "La forme de l'image a changé (rotation ou autre caméra). Replacez les cercles." : null);
+    if (!loopTimer) loop();
+  }catch(e){
+    const n = e && e.name;
+    if (n === 'NotAllowedError' || n === 'SecurityError')
+      showStartError("L'accès à la caméra a été refusé ou est bloqué sur cette page. Autorisez la caméra dans les réglages du navigateur. Si la page est affichée dans une autre application, ouvrez-la directement dans Safari ou Chrome.");
+    else if (n === 'NotFoundError') showStartError("Aucune caméra trouvée sur cet appareil.");
+    else if (n === 'NotReadableError') showStartError("La caméra est déjà utilisée par une autre application. Fermez-la puis réessayez.");
+    else showStartError("Impossible de démarrer la caméra (" + (n || e) + ").");
+  }
+}
+function showStartError(msg){ $('start').classList.remove('hidden'); const b = $('startError'); b.textContent = msg; b.classList.add('show'); }
+
+async function listCameras(){
+  try{
+    const devs = (await navigator.mediaDevices.enumerateDevices()).filter(d => d.kind === 'videoinput');
+    const sel = $('camSelect'); sel.innerHTML = '';
+    const cur = track && track.getSettings ? track.getSettings().deviceId : '';
+    devs.forEach((d, i) => {
+      const o = document.createElement('option'); o.value = d.deviceId; o.textContent = d.label || ('Caméra ' + (i+1));
+      if (d.deviceId === cur) o.selected = true; sel.appendChild(o);
+    });
+    $('camInfo').textContent = 'Image : ' + W + ' × ' + H + ' pixels';
+  }catch(e){}
+}
+
+function onVideoSize(){
+  W = video.videoWidth; H = video.videoHeight;
+  svg.setAttribute('viewBox', '0 0 ' + W + ' ' + H);
+  aw = 160; ah = Math.max(2, Math.round(aw * H / W));
+  acv.width = aw; acv.height = ah;
+  if (calib) buildMasks();
+  drawOverlay();
+}
+video.addEventListener('resize', () => {
+  if (!video.videoWidth) return;
+  const oldAspect = W && H ? W/H : 0;
+  onVideoSize();
+  if (mode === 'run' && calib && Math.abs(calib.aspect - W/H) > 0.02 && oldAspect)
+    enterCalib("La forme de l'image a changé (rotation ?). Replacez les cercles.");
+});
+
+async function requestWake(){
+  try{ if ('wakeLock' in navigator) wakeLock = await navigator.wakeLock.request('screen'); }catch(e){}
+}
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && stream) requestWake(); });
+
+/* ---------- Cercles : géométrie ---------- */
+function defaultCalib(){
+  return { dish:{ x:.36, y:.5, r:.34 }, lid:{ x:.76, y:.5, r:.24 }, aspect: W/H };
+}
+const mn = () => Math.min(W, H);
+function circlePx(c){ return { cx:c.x*W, cy:c.y*H, r:c.r*mn() }; }
+
+function buildMasks(){
+  const d = [], l = [], o = [], m = Math.min(aw, ah);
+  const D = { x:calib.dish.x*aw, y:calib.dish.y*ah, r:calib.dish.r*m };
+  const L = { x:calib.lid.x*aw,  y:calib.lid.y*ah,  r:calib.lid.r*m };
+  for (let y = 0; y < ah; y++) for (let x = 0; x < aw; x++){
+    const px = x + .5, py = y + .5, i = y*aw + x;
+    const dd = Math.hypot(px - D.x, py - D.y), dl = Math.hypot(px - L.x, py - L.y);
+    if (dd < D.r * .92) d.push(i);
+    else if (dl < L.r * .92) l.push(i);
+    else if (dd > D.r * 1.2 && dl > L.r * 1.2) o.push(i);
+  }
+  idxDish = Int32Array.from(d); idxLid = Int32Array.from(l); idxOut = Int32Array.from(o);
+}
+
+/* ---------- Overlay SVG ---------- */
+function el(name, attrs){ const e = document.createElementNS(SVGNS, name); for (const k in attrs) e.setAttribute(k, attrs[k]); return e; }
+function drawOverlay(){
+  svg.innerHTML = '';
+  if (!W || !calib) return;
+  const fs = mn() * 0.045;
+  const color = { dish:'var(--dish)', lid:'var(--lid)' };
+  const label = { dish:'Boîte', lid:'Couvercle' };
+  let stroke = null;
+  if (mode === 'run'){
+    stroke = { empty:'#E9EFEE', settling:'#E3A82B', focusing:'#E3A82B', saving:'#E3A82B', wait_removal: lastMsg && lastMsg.ok === false ? '#D9433D' : '#1E9E5E' }[state] || '#E9EFEE';
+  }
+  ['dish','lid'].forEach(k => {
+    const c = circlePx(calib[k]);
+    const g = el('g', { 'data-k':k });
+    if (mode === 'calib'){
+      g.appendChild(el('circle', { cx:c.cx, cy:c.cy, r:c.r, fill:'rgba(255,255,255,0.08)', stroke:color[k], 'stroke-width':4, 'vector-effect':'non-scaling-stroke', 'data-role':'move', style:'cursor:move' }));
+      const hx = c.cx + c.r, hy = c.cy;
+      g.appendChild(el('circle', { cx:hx, cy:hy, r:mn()*0.05, fill:'transparent', 'data-role':'size', style:'cursor:ew-resize' }));
+      g.appendChild(el('circle', { cx:hx, cy:hy, r:mn()*0.022, fill:color[k], stroke:'#061114', 'stroke-width':2, 'vector-effect':'non-scaling-stroke', 'data-role':'size', style:'cursor:ew-resize' }));
+    } else {
+      g.appendChild(el('circle', { cx:c.cx, cy:c.cy, r:c.r, fill:'none', stroke:stroke, 'stroke-width':3, 'stroke-dasharray': k === 'lid' ? '10 8' : 'none', 'vector-effect':'non-scaling-stroke', opacity:.9 }));
+    }
+    const t = el('text', { x:c.cx, y:c.cy - c.r - fs*0.4, 'text-anchor':'middle', 'font-size':fs, 'font-weight':700, fill: mode === 'calib' ? color[k] : stroke, stroke:'#061114', 'stroke-width':fs*0.12, 'paint-order':'stroke', 'font-family':'Atkinson Hyperlegible, system-ui, sans-serif' });
+    t.textContent = label[k]; g.appendChild(t);
+    svg.appendChild(g);
+  });
+}
+
+/* Glisser-déposer des cercles */
+let drag = null;
+function svgPoint(ev){
+  const p = svg.createSVGPoint(); p.x = ev.clientX; p.y = ev.clientY;
+  return p.matrixTransform(svg.getScreenCTM().inverse());
+}
+svg.addEventListener('pointerdown', ev => {
+  if (mode !== 'calib') return;
+  const role = ev.target.getAttribute('data-role'); if (!role) return;
+  const k = ev.target.parentNode.getAttribute('data-k');
+  const p = svgPoint(ev), c = circlePx(calib[k]);
+  drag = { k, role, dx:p.x - c.cx, dy:p.y - c.cy, id:ev.pointerId };
+  svg.setPointerCapture(ev.pointerId); ev.preventDefault();
+});
+svg.addEventListener('pointermove', ev => {
+  if (!drag || ev.pointerId !== drag.id) return;
+  const p = svgPoint(ev), c = calib[drag.k];
+  if (drag.role === 'move'){
+    c.x = Math.min(1, Math.max(0, (p.x - drag.dx) / W));
+    c.y = Math.min(1, Math.max(0, (p.y - drag.dy) / H));
+  } else {
+    const cp = circlePx(c);
+    c.r = Math.min(.7, Math.max(.05, Math.hypot(p.x - cp.cx, p.y - cp.cy) / mn()));
+  }
+  drawOverlay();
+});
+const endDrag = ev => { if (drag && ev.pointerId === drag.id){ drag = null; store.set('petri.calib', calib); } };
+svg.addEventListener('pointerup', endDrag); svg.addEventListener('pointercancel', endDrag);
+
+/* ---------- Modes ---------- */
+function enterCalib(reason){
+  mode = 'calib'; state = 'idle'; ref = null;
+  if (!calib || Math.abs(calib.aspect - W/H) > 0.02) calib = defaultCalib();
+  drawOverlay();
+  setStatus('idle', 'Placez les deux cercles',
+    (reason ? reason + ' ' : '') + "Faites glisser chaque cercle, la poignée à droite change sa taille. Laissez le socle vide, puis validez.",
+    [{ label:'Valider (socle vide)', primary:true, fn: () => startRun(false) }]);
+}
+async function startRun(silent){
+  calib.aspect = W/H; store.set('petri.calib', calib);
+  buildMasks(); mode = 'run';
+  await takeReference();
+  state = 'empty'; lastMsg = null; drawOverlay();
+  setStatus('wait', 'Prêt', 'Posez une boîte ouverte et son couvercle dans leurs cercles.', runActions());
+  if (!silent) toast('Fond vide enregistré.');
+}
+async function takeReference(){
+  refPending = true;
+  setStatus('busy', 'Mesure du fond vide…', 'Ne posez rien sur le socle.');
+  const n = aw*ah, acc = new Float32Array(n*3); const frames = 5;
+  for (let f = 0; f < frames; f++){
+    actx.drawImage(video, 0, 0, aw, ah);
+    const d = actx.getImageData(0, 0, aw, ah).data;
+    for (let i = 0; i < n; i++){ acc[i*3] += d[i*4]; acc[i*3+1] += d[i*4+1]; acc[i*3+2] += d[i*4+2]; }
+    await new Promise(r => setTimeout(r, 90));
+  }
+  for (let i = 0; i < acc.length; i++) acc[i] /= frames;
+  ref = acc; prevL = null; refPending = false;
+}
+
+/* ---------- Analyse d'image ---------- */
+function analyse(){
+  actx.drawImage(video, 0, 0, aw, ah);
+  const d = actx.getImageData(0, 0, aw, ah).data, n = aw*ah;
+  // compensation d'exposition globale à partir de la zone hors cercles
+  let sc = 0, sr = 0;
+  for (let j = 0; j < idxOut.length; j++){ const i = idxOut[j], p = i*4, q = i*3; sc += d[p]+d[p+1]+d[p+2]; sr += ref[q]+ref[q+1]+ref[q+2]; }
+  let gain = (idxOut.length > 40 && sr > 0) ? sc / sr : 1;
+  gain = Math.min(2, Math.max(.5, gain));
+  const T = settings.sens;
+  const frac = idx => {
+    if (!idx.length) return 0;
+    let c = 0;
+    for (let j = 0; j < idx.length; j++){
+      const i = idx[j], p = i*4, q = i*3;
+      const a = Math.abs(d[p]/gain - ref[q]), b = Math.abs(d[p+1]/gain - ref[q+1]), e = Math.abs(d[p+2]/gain - ref[q+2]);
+      if (a > T || b > T || e > T) c++;
+    }
+    return c / idx.length;
+  };
+  const fDish = frac(idxDish), fLid = frac(idxLid);
+  let motion = 0;
+  const L = new Float32Array(n);
+  for (let i = 0; i < n; i++){ L[i] = (d[i*4]*.3 + d[i*4+1]*.59 + d[i*4+2]*.11); if (prevL) motion += Math.abs(L[i] - prevL[i]); }
+  motion = prevL ? motion / n : 0; prevL = L;
+  return { d, fDish, fLid, motion };
+}
+
+function dishSquare(){
+  const c = circlePx(calib.dish), r = c.r * .78;
+  let x = Math.max(0, c.cx - r), y = Math.max(0, c.cy - r);
+  let s = Math.min(2*r, W - x, H - y);
+  return { x, y, s };
+}
+function sharpness(){
+  const q = dishSquare(), N = 256; scv.width = N; scv.height = N;
+  sctx.drawImage(video, q.x, q.y, q.s, q.s, 0, 0, N, N);
+  const d = sctx.getImageData(0, 0, N, N).data, g = new Float32Array(N*N);
+  for (let i = 0; i < N*N; i++) g[i] = d[i*4]*.3 + d[i*4+1]*.59 + d[i*4+2]*.11;
+  let s = 0, s2 = 0, k = 0;
+  for (let y = 1; y < N-1; y++) for (let x = 1; x < N-1; x++){
+    const i = y*N + x, v = 4*g[i] - g[i-1] - g[i+1] - g[i-N] - g[i+N];
+    s += v; s2 += v*v; k++;
+  }
+  const m = s/k; return s2/k - m*m;
+}
+function cropRect(){
+  const a = circlePx(calib.dish), b = circlePx(calib.lid), pad = 1.08;
+  let x0 = Math.min(a.cx - a.r*pad, b.cx - b.r*pad), y0 = Math.min(a.cy - a.r*pad, b.cy - b.r*pad);
+  let x1 = Math.max(a.cx + a.r*pad, b.cx + b.r*pad), y1 = Math.max(a.cy + a.r*pad, b.cy + b.r*pad);
+  x0 = Math.max(0, Math.floor(x0)); y0 = Math.max(0, Math.floor(y0));
+  x1 = Math.min(W, Math.ceil(x1)); y1 = Math.min(H, Math.ceil(y1));
+  return { x:x0, y:y0, w:x1-x0, h:y1-y0 };
+}
+function grabBest(){
+  const r = cropRect(); bestCv.width = r.w; bestCv.height = r.h;
+  bestCtx.drawImage(video, r.x, r.y, r.w, r.h, 0, 0, r.w, r.h);
+}
+function medianSharp(){
+  if (sharpHistory.length < 3) return 0;
+  const a = sharpHistory.slice().sort((x, y) => x - y); return a[Math.floor(a.length/2)];
+}
+
+/* ---------- Machine d'état ---------- */
+const MOTION_T = 2.2;
+function loop(){
+  loopTimer = setTimeout(loop, 120);
+  if (mode !== 'run' || !ref || refPending || !video.videoWidth || state === 'saving') return;
+  const a = analyse(), now = performance.now(), P = settings.presence / 100;
+  if (settings.meters){
+    $('mDish').textContent = Math.round(a.fDish*100) + ' %';
+    $('mLid').textContent = Math.round(a.fLid*100) + ' %';
+    $('mMotion').textContent = a.motion.toFixed(1);
+  }
+  switch (state){
+    case 'empty':
+      if (a.fDish > P){ state = 'settling'; tSince = now; sounds.tick(); drawOverlay();
+        setStatus('busy', 'Boîte détectée', 'Ne bougez plus…', runActions()); }
+      else if (a.fDish < P*.3 && a.motion < 1.2){
+        // adaptation lente aux variations de lumière
+        for (let i = 0, n = aw*ah; i < n; i++){ ref[i*3] += (a.d[i*4]-ref[i*3])*.02; ref[i*3+1] += (a.d[i*4+1]-ref[i*3+1])*.02; ref[i*3+2] += (a.d[i*4+2]-ref[i*3+2])*.02; }
+      }
+      break;
+    case 'settling':
+      if (a.fDish < P*.5){ toEmpty(); break; }
+      if (a.motion > MOTION_T) tSince = now;
+      if (now - tSince >= settings.stableMs) beginFocus(now);
+      break;
+    case 'focusing': {
+      if (a.motion > MOTION_T*2.2){ fail('Mouvement pendant la prise de vue', 'La boîte ou une main a bougé.'); break; }
+      const s = sharpness();
+      if (settings.meters) $('mSharp').textContent = Math.round(s);
+      if (s > bestSharp){ bestSharp = s; grabBest(); }
+      if (now - tFocus >= settings.focusMs){
+        if (settings.requireLid && a.fLid < P*.5){ fail('Couvercle non détecté', "Placez le couvercle dans son cercle, numéro visible."); break; }
+        const med = medianSharp();
+        if (settings.sharpCheck && med > 0 && bestSharp < med*.45){ fail('Image floue', 'Netteté ' + Math.round(bestSharp) + ' pour ' + Math.round(med) + ' habituellement.'); break; }
+        save();
+      }
+      break; }
+    case 'wait_removal':
+      if (a.fDish < P*.5){ if (!tEmptySince) tEmptySince = now; if (now - tEmptySince > 600) toEmpty(); }
+      else tEmptySince = 0;
+      break;
+  }
+}
+function toEmpty(){
+  state = 'empty'; tEmptySince = 0; drawOverlay();
+  setStatus('wait', 'Prêt', 'Posez une boîte ouverte et son couvercle dans leurs cercles.', runActions());
+}
+async function beginFocus(now){
+  state = 'focusing'; tFocus = now; bestSharp = -1; drawOverlay();
+  setStatus('busy', 'Mise au point…', 'Ne bougez plus.', []);
+  try{
+    const caps = track.getCapabilities ? track.getCapabilities() : {};
+    const adv = {};
+    if (caps.focusMode && caps.focusMode.includes('single-shot')) adv.focusMode = 'single-shot';
+    if (caps.pointsOfInterest !== undefined) adv.pointsOfInterest = [{ x:calib.dish.x, y:calib.dish.y }];
+    if (Object.keys(adv).length) await track.applyConstraints({ advanced:[adv] });
+  }catch(e){}
+}
+function manualCapture(){
+  if (mode !== 'run' || !ref) return;
+  initAudio();
+  if (state === 'focusing' || state === 'saving') return;
+  beginFocus(performance.now());
+}
+function fail(title, detail){
+  state = 'wait_removal'; tEmptySince = 0; lastMsg = { ok:false };
+  sounds.err(); flash('#D9433D'); drawOverlay();
+  setStatus('err', 'Échec : ' + title, detail + ' Retirez la boîte et reposez-la pour réessayer.', runActions());
+}
+function pad(n){ return String(n).padStart(2, '0'); }
+async function save(){
+  state = 'saving';
+  setStatus('busy', 'Enregistrement…', '', []);
+  try{
+    if (bestCv.width < 10) throw new Error('image vide');
+    const blob = await new Promise((res, rej) => bestCv.toBlob(b => b ? res(b) : rej(new Error('encodage impossible')), 'image/jpeg', .93));
+    const dt = new Date(), id = Date.now();
+    let name = dt.getFullYear() + '-' + pad(dt.getMonth()+1) + '-' + pad(dt.getDate()) + '_' + pad(dt.getHours()) + 'h' + pad(dt.getMinutes()) + 'm' + pad(dt.getSeconds()) + 's.jpg';
+    const all = await photoAll();
+    if (all.some(r => r.name === name)){ let k = 2; while (all.some(r => r.name === name.replace('.jpg', '-' + k + '.jpg'))) k++; name = name.replace('.jpg', '-' + k + '.jpg'); }
+    await photoPut({ id, name, blob, w:bestCv.width, h:bestCv.height, sharp:bestSharp, exported:false });
+    sharpHistory.push(bestSharp); if (sharpHistory.length > 15) sharpHistory.shift(); store.set('petri.sharp', sharpHistory);
+    const total = await photoCount(); $('countBadge').textContent = total;
+    state = 'wait_removal'; tEmptySince = 0; lastMsg = { ok:true };
+    sounds.ok(); flash('#1E9E5E'); drawOverlay();
+    setStatus('ok', 'Photo enregistrée', name.replace('.jpg', '') + ', ' + total + ' photo' + (total > 1 ? 's' : '') + ' au total. Retirez la boîte.', runActions());
+  }catch(e){
+    const quota = e && (e.name === 'QuotaExceededError');
+    fail('Enregistrement impossible', quota ? "La mémoire de l'app est pleine : exportez puis supprimez des photos." : 'Erreur : ' + (e && e.message || e) + '.');
+  }
+}
+
+/* ---------- Panneaux ---------- */
+function openSheet(id){ document.querySelectorAll('.sheet').forEach(s => s.classList.toggle('open', s.id === id)); $('scrim').classList.add('open'); }
+function closeSheets(){ document.querySelectorAll('.sheet').forEach(s => s.classList.remove('open')); $('scrim').classList.remove('open'); revokeThumbs(); }
+document.querySelectorAll('[data-close]').forEach(b => b.addEventListener('click', closeSheets));
+$('scrim').addEventListener('click', closeSheets);
+
+let thumbUrls = [];
+function revokeThumbs(){ thumbUrls.forEach(u => URL.revokeObjectURL(u)); thumbUrls = []; }
+async function renderGrid(){
+  revokeThumbs();
+  const g = $('grid'); g.innerHTML = '';
+  let all = [];
+  try{ all = (await photoAll()).sort((a, b) => b.id - a.id); }catch(e){}
+  if (!all.length){ g.innerHTML = '<p class="empty">Aucune photo pour l\'instant. Posez une boîte sur le socle pour commencer.</p>'; }
+  all.forEach(r => {
+    const u = URL.createObjectURL(r.blob); thumbUrls.push(u);
+    const d = document.createElement('div'); d.className = 'thumb';
+    const img = document.createElement('img'); img.src = u; img.alt = r.name; img.loading = 'lazy';
+    const m = document.createElement('div'); m.className = 'meta';
+    const s = document.createElement('span'); s.textContent = r.name.replace('.jpg', '').replace('_', ' ');
+    m.appendChild(s);
+    if (r.exported){ const t = document.createElement('span'); t.className = 'tag'; t.textContent = 'exportée'; m.appendChild(t); }
+    const del = document.createElement('button'); del.type = 'button'; del.textContent = '✕'; del.setAttribute('aria-label', 'Supprimer ' + r.name);
+    del.addEventListener('click', async () => { if (confirm('Supprimer ' + r.name + ' ?')){ await photoDel(r.id); renderGrid(); refreshCount(); } });
+    m.appendChild(del);
+    d.append(img, m); g.appendChild(d);
+  });
+  $('btnShare').disabled = $('btnZip').disabled = !all.length;
+  $('btnClearExported').disabled = !all.some(r => r.exported);
+}
+async function markExported(ids){
+  for (const id of ids){ await tx('readwrite', s => { const q = s.get(id); q.onsuccess = () => { if (q.result){ q.result.exported = true; s.put(q.result); } }; return q; }); }
+}
+
+$('btnShare').addEventListener('click', async () => {
+  const all = await photoAll(); if (!all.length) return;
+  const files = all.map(r => new File([r.blob], r.name, { type:'image/jpeg' }));
+  if (navigator.canShare && navigator.canShare({ files })){
+    try{
+      await navigator.share({ files });
+      await markExported(all.map(r => r.id)); renderGrid();
+      toast(all.length + ' photo' + (all.length > 1 ? 's' : '') + ' envoyée' + (all.length > 1 ? 's' : '') + '.');
+    }catch(e){ if (e.name !== 'AbortError') toast('Partage impossible : ' + e.message); }
+  } else {
+    toast("Le partage vers la galerie n'est pas disponible ici. Utilisez le .zip.");
+  }
+});
+$('btnZip').addEventListener('click', async () => {
+  const all = await photoAll(); if (!all.length) return;
+  if (!window.JSZip){ toast("Le module .zip n'a pas pu se charger (connexion ?)."); return; }
+  const btn = $('btnZip'); btn.disabled = true; btn.textContent = 'Préparation…';
+  try{
+    const zip = new JSZip();
+    all.forEach(r => zip.file(r.name, r.blob, { binary:true }));
+    const blob = await zip.generateAsync({ type:'blob', compression:'STORE' });
+    const dt = new Date(), fname = 'boites-petri_' + dt.getFullYear() + '-' + pad(dt.getMonth()+1) + '-' + pad(dt.getDate()) + '_' + pad(dt.getHours()) + 'h' + pad(dt.getMinutes()) + '.zip';
+    let done = false;
+    if (window.claude && typeof window.claude.use === 'function'){
+      const dl = await window.claude.use('downloads');
+      if (dl){
+        try{ await dl.save({ filename:fname, data:blob }); done = true; }
+        catch(e){ if (e && e.code === 'declined'){ btn.textContent = 'Télécharger en .zip'; btn.disabled = false; return; } }
+      }
+    }
+    if (!done){
+      const u = URL.createObjectURL(blob), a = document.createElement('a');
+      a.href = u; a.download = fname; document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(u), 30000); done = true;
+    }
+    await markExported(all.map(r => r.id)); renderGrid(); toast('Archive prête : ' + fname);
+  }catch(e){ toast('Export impossible : ' + (e.message || e)); }
+  btn.textContent = 'Télécharger en .zip'; btn.disabled = false;
+});
+$('btnClearExported').addEventListener('click', async () => {
+  const ex = (await photoAll()).filter(r => r.exported);
+  if (!ex.length) return;
+  if (!confirm('Supprimer ' + ex.length + ' photo' + (ex.length > 1 ? 's' : '') + ' déjà exportée' + (ex.length > 1 ? 's' : '') + ' de l\'app ?')) return;
+  for (const r of ex) await photoDel(r.id);
+  renderGrid(); refreshCount();
+});
+
+/* ---------- Réglages ---------- */
+function bindRange(id, key, fmt){
+  const i = $(id), v = $(id.replace('s', 'v'));
+  i.value = settings[key]; v.textContent = fmt(settings[key]);
+  i.addEventListener('input', () => { settings[key] = +i.value; v.textContent = fmt(+i.value); store.set('petri.settings', settings); });
+}
+bindRange('sSens', 'sens', x => x);
+bindRange('sPresence', 'presence', x => x + ' %');
+bindRange('sStable', 'stableMs', x => (x/1000).toFixed(1).replace('.', ',') + ' s');
+bindRange('sFocus', 'focusMs', x => (x/1000).toFixed(1).replace('.', ',') + ' s');
+function bindCheck(id, key, after){
+  const c = $(id); c.checked = !!settings[key];
+  c.addEventListener('change', () => { settings[key] = c.checked; store.set('petri.settings', settings); after && after(); });
+}
+bindCheck('cLid', 'requireLid'); bindCheck('cSharp', 'sharpCheck'); bindCheck('cSound', 'sound');
+bindCheck('cMeters', 'meters', () => $('meters').classList.toggle('hidden', !settings.meters));
+$('meters').classList.toggle('hidden', !settings.meters);
+$('tOk').addEventListener('click', () => { initAudio(); const s = settings.sound; settings.sound = true; sounds.ok(); settings.sound = s; });
+$('tErr').addEventListener('click', () => { initAudio(); const s = settings.sound; settings.sound = true; sounds.err(); settings.sound = s; });
+$('camSelect').addEventListener('change', e => { settings.deviceId = e.target.value; store.set('petri.settings', settings); startCamera(); });
+$('btnRef').addEventListener('click', async () => { if (mode !== 'run') return; closeSheets(); await takeReference(); toEmpty(); toast('Fond vide mis à jour.'); });
+$('btnCalib2').addEventListener('click', () => { closeSheets(); if (stream) enterCalib(); });
+
+/* ---------- En-tête ---------- */
+$('btnStart').addEventListener('click', () => { initAudio(); startCamera(); try{ navigator.storage && navigator.storage.persist && navigator.storage.persist(); }catch(e){} });
+$('btnCalib').addEventListener('click', () => { if (stream) enterCalib(); });
+$('btnPhotos').addEventListener('click', () => { openSheet('sheetPhotos'); renderGrid(); });
+$('btnSettings').addEventListener('click', () => { openSheet('sheetSettings'); listCameras(); });
+$('btnFull').addEventListener('click', () => {
+  initAudio();
+  const d = document, e = d.documentElement;
+  if (d.fullscreenElement || d.webkitFullscreenElement) (d.exitFullscreen || d.webkitExitFullscreen).call(d);
+  else { const f = e.requestFullscreen || e.webkitRequestFullscreen; if (f) f.call(e); else toast("Le plein écran n'est pas disponible sur cet appareil."); }
+});
+// Télécommande / pédale Bluetooth (envoient Espace, Entrée ou Page suivante)
+document.addEventListener('keydown', e => {
+  if (['Space','Enter','PageDown','ArrowRight','NumpadEnter'].includes(e.code) && mode === 'run' && !document.querySelector('.sheet.open')){
+    e.preventDefault(); manualCapture();
+  }
+});
+document.addEventListener('pointerdown', initAudio, { once:true });
+refreshCount();
+})();
+</script>
+</body>
+</html>
