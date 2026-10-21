@@ -216,6 +216,11 @@ select{width:100%;min-height:44px;border:1px solid var(--line);border-radius:10p
       <input type="range" id="sStable" min="300" max="4000" step="100">
     </div>
     <div class="field">
+      <label for="sMotion">Tolérance au mouvement <span id="vMotion"></span></label>
+      <input type="range" id="sMotion" min="1" max="10" step="0.5">
+      <p>Plus haut, l'app accepte davantage de mouvement (vibrations, main proche). Comparez avec la mesure « Mouvement ».</p>
+    </div>
+    <div class="field">
       <label for="sFocus">Durée de mise au point <span id="vFocus"></span></label>
       <input type="range" id="sFocus" min="500" max="4000" step="100">
       <p>L'app garde l'image la plus nette obtenue pendant cette durée.</p>
@@ -224,6 +229,7 @@ select{width:100%;min-height:44px;border:1px solid var(--line);border-radius:10p
     <div class="group-title">Contrôles</div>
     <label class="check"><input type="checkbox" id="cLid"> Socle du couvercle : cercle et détection automatique du couvercle</label>
     <label class="check"><input type="checkbox" id="cSharp"> Refuser les images floues</label>
+    <label class="check"><input type="checkbox" id="cLock"> Verrouiller la mise au point après la première photo (plus rapide)</label>
     <label class="check"><input type="checkbox" id="cMeters"> Afficher les mesures</label>
     <label class="check"><input type="checkbox" id="cSound"> Sons</label>
     <div class="row"><button class="btn" id="tOk" type="button">Tester le son de réussite</button><button class="btn" id="tErr" type="button">Tester le son d'erreur</button></div>
@@ -261,7 +267,7 @@ const video = $('video'), svg = $('overlay');
 const SVGNS = 'http://www.w3.org/2000/svg';
 
 /* ---------- Réglages persistants ---------- */
-const DEFAULTS = { sens:20, presence:20, stableMs:1000, focusMs:1500, requireLid:true, sharpCheck:true, meters:true, sound:true, deviceId:'' };
+const DEFAULTS = { sens:20, presence:20, stableMs:1000, motionTol:3.5, focusMs:1500, lockFocus:true, requireLid:true, sharpCheck:true, meters:true, sound:true, deviceId:'' };
 const store = {
   get(k, d){ try{ const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; }catch(e){ return d; } },
   set(k, v){ try{ localStorage.setItem(k, JSON.stringify(v)); }catch(e){} }
@@ -275,7 +281,9 @@ let mode = 'start'; // start | calib | run
 let state = 'idle'; // idle | empty | settling | focusing | saving | wait_removal
 let tSince = 0, tFocus = 0, tEmptySince = 0, bestSharp = 0, lastMsg = null;
 let ref = null, prevL = null, refPending = false;
-let snap = null, tSwap = 0; // image de la boîte photographiée, pour repérer son remplacement
+let focusLocked = false, lockSharp = 0, goodSharp = 0, lockVerify = false, refreshRef = false, focusDur = 0;
+let snap = null, tSwap = 0;
+let tRetry = 0, failStreak = 0; // nouvel essai automatique après un échec // image de la boîte photographiée, pour repérer son remplacement
 let aw = 160, ah = 90, idxDish = null, idxLid = null, idxOut = null;
 const acv = document.createElement('canvas'), actx = acv.getContext('2d', { willReadFrequently:true });
 const scv = document.createElement('canvas'), sctx = scv.getContext('2d', { willReadFrequently:true });
@@ -360,6 +368,7 @@ async function startCamera(){
   }
   try{
     if (stream) stream.getTracks().forEach(t => t.stop());
+    focusLocked = false; lockVerify = false; refreshRef = false; goodSharp = 0; // nouvelle caméra : nouvelle mise au point
     const v = { width:{ ideal:3840 }, height:{ ideal:2160 } };
     if (settings.deviceId) v.deviceId = { exact: settings.deviceId }; else v.facingMode = { ideal:'environment' };
     try{ stream = await navigator.mediaDevices.getUserMedia({ video:v, audio:false }); }
@@ -438,7 +447,7 @@ function circlePx(c){ return { cx:c.x*W, cy:c.y*H, r:c.r*mn() }; }
 
 const lidOn = () => !!settings.requireLid;
 const circleKeys = () => lidOn() ? ['dish','lid'] : ['dish'];
-const placeMsg = () => lidOn() ? 'Posez une boîte ouverte et son couvercle dans leurs cercles.' : 'Posez une boîte ouverte dans son cercle.';
+const placeMsg = () => (lidOn() ? 'Posez une boîte ouverte et son couvercle dans leurs cercles.' : 'Posez une boîte ouverte dans son cercle.') + (focusLocked ? ' Mise au point verrouillée.' : '');
 function buildMasks(){
   const d = [], l = [], o = [], m = Math.min(aw, ah);
   const D = { x:calib.dish.x*aw, y:calib.dish.y*ah, r:calib.dish.r*m };
@@ -464,7 +473,7 @@ function drawOverlay(){
   const label = { dish:'Boîte', lid:'Couvercle' };
   let stroke = null;
   if (mode === 'run'){
-    stroke = { empty:'#E9EFEE', settling:'#E3A82B', focusing:'#E3A82B', saving:'#E3A82B', wait_removal: lastMsg && lastMsg.ok === false ? '#D9433D' : '#1E9E5E' }[state] || '#E9EFEE';
+    stroke = { empty:'#E9EFEE', settling:'#E3A82B', focusing:'#E3A82B', saving:'#E3A82B', retry:'#D9433D', wait_removal: lastMsg && lastMsg.ok === false ? '#D9433D' : '#1E9E5E' }[state] || '#E9EFEE';
   }
   circleKeys().forEach(k => {
     const c = circlePx(calib[k]);
@@ -514,6 +523,7 @@ svg.addEventListener('pointerup', endDrag); svg.addEventListener('pointercancel'
 
 /* ---------- Modes ---------- */
 function enterCalib(reason){
+  unlockFocus(); goodSharp = 0;
   mode = 'calib'; state = 'idle'; ref = null;
   if (!calib || Math.abs(calib.aspect - W/H) > 0.02) calib = defaultCalib();
   drawOverlay();
@@ -620,8 +630,8 @@ function medianSharp(){
 }
 
 /* ---------- Machine d'état ---------- */
-const MOTION_T = 2.2;
 function loop(){
+  const MOTION_T = settings.motionTol;
   loopTimer = setTimeout(loop, 120);
   if (mode !== 'run' || !ref || refPending || !video.videoWidth || state === 'saving') return;
   const a = analyse(), now = performance.now(), P = settings.presence / 100;
@@ -645,18 +655,38 @@ function loop(){
       if (now - tSince >= settings.stableMs) beginFocus(now);
       break;
     case 'focusing': {
-      if (a.motion > MOTION_T*2.2){ fail('Mouvement pendant la prise de vue', 'La boîte ou une main a bougé.'); break; }
-      const s = sharpness();
-      if (settings.meters) $('mSharp').textContent = Math.round(s);
-      if (s > bestSharp){ bestSharp = s; grabBest(); }
-      if (now - tFocus >= settings.focusMs){
+      // les images prises pendant un mouvement sont ignorées au lieu de faire échouer la prise
+      if (a.motion <= MOTION_T*1.5){
+        const s = sharpness();
+        if (settings.meters) $('mSharp').textContent = Math.round(s);
+        if (s > bestSharp){ bestSharp = s; grabBest(); }
+      }
+      if (now - tFocus >= focusDur){
+        if (bestSharp < 0){ // aucune image immobile : on attend encore un peu
+          if (now - tFocus >= focusDur + 1500) fail('Mouvement pendant la prise de vue', 'La boîte ou une main a bougé.');
+          break;
+        }
+        // double contrôle : avec la mise au point verrouillée, l'image doit rester aussi nette qu'à la première photo
+        if (focusLocked && bestSharp < lockSharp*.6){ unlockFocus(); toast('Image moins nette : nouvelle mise au point.'); beginFocus(now); break; }
         if (settings.requireLid && a.fLid < P*.5){ fail('Couvercle non détecté', "Placez le couvercle dans son cercle, numéro visible."); break; }
         const med = medianSharp();
-        if (settings.sharpCheck && med > 0 && bestSharp < med*.45){ fail('Image floue', 'Netteté ' + Math.round(bestSharp) + ' pour ' + Math.round(med) + ' habituellement.'); break; }
+        if (!focusLocked && settings.sharpCheck && med > 0 && bestSharp < med*.45){ fail('Image floue', 'Netteté ' + Math.round(bestSharp) + ' pour ' + Math.round(med) + ' habituellement.'); break; }
         save();
       }
       break; }
+    case 'retry':
+      if (a.fDish < P*.5){ if (!tEmptySince) tEmptySince = now; if (now - tEmptySince > 600){ failStreak = 0; toEmpty(); } break; }
+      tEmptySince = 0;
+      if (now - tRetry >= 900){ state = 'settling'; tSince = now; drawOverlay();
+        setStatus('busy', 'Nouvel essai…', 'Ne bougez plus…', runActions()); }
+      break;
     case 'wait_removal': {
+      if (lockVerify && a.fDish >= P*.5 && a.motion < MOTION_T){
+        lockVerify = false;
+        const s = sharpness();
+        if (s < lockSharp*.6){ unlockFocus(); toast('Le verrouillage de la mise au point a échoué, autofocus conservé.'); }
+        else toast('Mise au point verrouillée pour les prochaines boîtes.');
+      }
       if (a.fDish < P*.5){ if (!tEmptySince) tEmptySince = now; if (now - tEmptySince > 600){ snap = null; toEmpty(); } break; }
       tEmptySince = 0;
       if (!snap){ if (a.motion < MOTION_T){ snap = dishPixels(a.d); tSwap = 0; } break; }
@@ -670,12 +700,18 @@ function loop(){
   }
 }
 function toEmpty(){
+  failStreak = 0;
+  // premier socle vide après le verrouillage : on reprend le fond avec la nouvelle mise au point
+  if (refreshRef){ refreshRef = false; takeReference().then(toEmpty); return; }
   state = 'empty'; tEmptySince = 0; drawOverlay();
   setStatus('wait', 'Prêt', placeMsg(), runActions());
 }
+const QUICK_MS = 400;
 async function beginFocus(now){
   state = 'focusing'; tFocus = now; bestSharp = -1; drawOverlay();
-  setStatus('busy', 'Mise au point…', 'Ne bougez plus.', []);
+  focusDur = focusLocked ? QUICK_MS : settings.focusMs;
+  setStatus('busy', focusLocked ? 'Prise de vue…' : 'Mise au point…', 'Ne bougez plus.', []);
+  if (focusLocked) return;
   try{
     const caps = track.getCapabilities ? track.getCapabilities() : {};
     const adv = {};
@@ -690,16 +726,39 @@ async function restoreFocus(){
     if (caps.focusMode && caps.focusMode.includes('continuous')) await track.applyConstraints({ advanced:[{ focusMode:'continuous' }] });
   }catch(e){}
 }
+async function lockFocus(sharp){
+  focusLocked = true; lockSharp = goodSharp = sharp; lockVerify = true; refreshRef = true;
+  try{
+    const caps = track.getCapabilities ? track.getCapabilities() : {}, cur = track.getSettings ? track.getSettings() : {};
+    if (caps.focusMode && caps.focusMode.includes('manual') && cur.focusDistance !== undefined)
+      await track.applyConstraints({ advanced:[{ focusMode:'manual', focusDistance:cur.focusDistance }] });
+    // sinon le mode « single-shot » appliqué pour la mise au point reste en place
+  }catch(e){}
+}
+function unlockFocus(){
+  if (focusLocked) restoreFocus();
+  focusLocked = false; lockVerify = false; refreshRef = false;
+}
+function afterShot(ok){
+  if (ok && settings.lockFocus){
+    // pas de reverrouillage sur une image nettement moins nette que lors du dernier verrouillage
+    if (!focusLocked){ if (!goodSharp || bestSharp >= goodSharp*.6) lockFocus(bestSharp); }
+    else lockSharp = lockSharp*.7 + bestSharp*.3;
+  }
+  if (!focusLocked) restoreFocus();
+}
 function manualCapture(){
   if (mode !== 'run' || !ref) return;
   initAudio();
   if (state === 'focusing' || state === 'saving') return;
   beginFocus(performance.now());
 }
-function fail(title, detail){
-  state = 'wait_removal'; tEmptySince = 0; snap = null; lastMsg = { ok:false }; restoreFocus();
-  sounds.err(); flash('#D9433D'); drawOverlay();
-  setStatus('err', 'Échec : ' + title, detail + ' Retirez la boîte et reposez-la pour réessayer.', runActions());
+function fail(title, detail, final){
+  // échec ponctuel : message affiché 1 s, puis nouvel essai automatique tant que la boîte est là
+  state = final ? 'wait_removal' : 'retry'; tRetry = performance.now(); tEmptySince = 0; snap = null; lastMsg = { ok:false }; afterShot(false);
+  if (!failStreak++ || final) sounds.err(); // un seul son d'erreur par série d'essais
+  flash('#D9433D'); drawOverlay();
+  setStatus('err', 'Échec : ' + title, detail + (final ? ' Retirez la boîte et reposez-la pour réessayer.' : ' Nouvel essai…'), runActions());
 }
 function pad(n){ return String(n).padStart(2, '0'); }
 async function save(){
@@ -715,12 +774,12 @@ async function save(){
     await photoPut({ id, name, blob, w:bestCv.width, h:bestCv.height, sharp:bestSharp, exported:false });
     sharpHistory.push(bestSharp); if (sharpHistory.length > 15) sharpHistory.shift(); store.set('petri.sharp', sharpHistory);
     const total = await photoCount(); $('countBadge').textContent = total;
-    state = 'wait_removal'; tEmptySince = 0; snap = null; lastMsg = { ok:true }; restoreFocus();
+    state = 'wait_removal'; tEmptySince = 0; snap = null; lastMsg = { ok:true }; failStreak = 0; afterShot(true);
     sounds.ok(); flash('#1E9E5E'); drawOverlay();
     setStatus('ok', 'Photo enregistrée', name.replace('.jpg', '') + ', ' + total + ' photo' + (total > 1 ? 's' : '') + ' au total. Retirez la boîte.', runActions());
   }catch(e){
     const quota = e && (e.name === 'QuotaExceededError');
-    fail('Enregistrement impossible', quota ? "La mémoire de l'app est pleine : exportez puis supprimez des photos." : 'Erreur : ' + (e && e.message || e) + '.');
+    fail('Enregistrement impossible', quota ? "La mémoire de l'app est pleine : exportez puis supprimez des photos." : 'Erreur : ' + (e && e.message || e) + '.', true);
   }
 }
 
@@ -814,6 +873,7 @@ function bindRange(id, key, fmt){
 bindRange('sSens', 'sens', x => x);
 bindRange('sPresence', 'presence', x => x + ' %');
 bindRange('sStable', 'stableMs', x => (x/1000).toFixed(1).replace('.', ',') + ' s');
+bindRange('sMotion', 'motionTol', x => String(x).replace('.', ','));
 bindRange('sFocus', 'focusMs', x => (x/1000).toFixed(1).replace('.', ',') + ' s');
 function bindCheck(id, key, after){
   const c = $(id); c.checked = !!settings[key];
@@ -823,7 +883,7 @@ bindCheck('cLid', 'requireLid', () => {
   if (calib && W){ buildMasks(); drawOverlay(); }
   if (mode === 'calib') enterCalib();
   else if (mode === 'run' && state === 'empty') setStatus('wait', 'Prêt', placeMsg(), runActions());
-}); bindCheck('cSharp', 'sharpCheck'); bindCheck('cSound', 'sound');
+}); bindCheck('cSharp', 'sharpCheck'); bindCheck('cLock', 'lockFocus', () => { if (!settings.lockFocus) unlockFocus(); }); bindCheck('cSound', 'sound');
 bindCheck('cMeters', 'meters', () => $('meters').classList.toggle('hidden', !settings.meters));
 $('meters').classList.toggle('hidden', !settings.meters);
 $('tOk').addEventListener('click', () => { initAudio(); const s = settings.sound; settings.sound = true; sounds.ok(); settings.sound = s; });
