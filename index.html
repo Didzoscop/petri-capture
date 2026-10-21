@@ -275,6 +275,7 @@ let mode = 'start'; // start | calib | run
 let state = 'idle'; // idle | empty | settling | focusing | saving | wait_removal
 let tSince = 0, tFocus = 0, tEmptySince = 0, bestSharp = 0, lastMsg = null;
 let ref = null, prevL = null, refPending = false;
+let snap = null, tSwap = 0; // image de la boîte photographiée, pour repérer son remplacement
 let aw = 160, ah = 90, idxDish = null, idxLid = null, idxOut = null;
 const acv = document.createElement('canvas'), actx = acv.getContext('2d', { willReadFrequently:true });
 const scv = document.createElement('canvas'), sctx = scv.getContext('2d', { willReadFrequently:true });
@@ -570,6 +571,19 @@ function analyse(){
   return { d, fDish, fLid, motion };
 }
 
+function dishPixels(d){
+  const out = new Float32Array(idxDish.length*3);
+  for (let j = 0; j < idxDish.length; j++){ const p = idxDish[j]*4; out[j*3] = d[p]; out[j*3+1] = d[p+1]; out[j*3+2] = d[p+2]; }
+  return out;
+}
+function changedFrac(d, base){
+  const T = settings.sens; let c = 0;
+  for (let j = 0; j < idxDish.length; j++){
+    const p = idxDish[j]*4, q = j*3;
+    if (Math.abs(d[p]-base[q]) > T || Math.abs(d[p+1]-base[q+1]) > T || Math.abs(d[p+2]-base[q+2]) > T) c++;
+  }
+  return idxDish.length ? c / idxDish.length : 0;
+}
 function dishSquare(){
   const c = circlePx(calib.dish), r = c.r * .78;
   let x = Math.max(0, c.cx - r), y = Math.max(0, c.cy - r);
@@ -642,10 +656,17 @@ function loop(){
         save();
       }
       break; }
-    case 'wait_removal':
-      if (a.fDish < P*.5){ if (!tEmptySince) tEmptySince = now; if (now - tEmptySince > 600) toEmpty(); }
-      else tEmptySince = 0;
-      break;
+    case 'wait_removal': {
+      if (a.fDish < P*.5){ if (!tEmptySince) tEmptySince = now; if (now - tEmptySince > 600){ snap = null; toEmpty(); } break; }
+      tEmptySince = 0;
+      if (!snap){ if (a.motion < MOTION_T){ snap = dishPixels(a.d); tSwap = 0; } break; }
+      // boîte remplacée sans passer par un socle vide : la zone a changé par rapport à la photo précédente
+      if (changedFrac(a.d, snap) > P && a.motion < MOTION_T){
+        if (!tSwap) tSwap = now;
+        if (now - tSwap > 400){ snap = null; state = 'settling'; tSince = now; sounds.tick(); drawOverlay();
+          setStatus('busy', 'Nouvelle boîte détectée', 'Ne bougez plus…', runActions()); }
+      } else tSwap = 0;
+      break; }
   }
 }
 function toEmpty(){
@@ -663,6 +684,12 @@ async function beginFocus(now){
     if (Object.keys(adv).length) await track.applyConstraints({ advanced:[adv] });
   }catch(e){}
 }
+async function restoreFocus(){
+  try{
+    const caps = track.getCapabilities ? track.getCapabilities() : {};
+    if (caps.focusMode && caps.focusMode.includes('continuous')) await track.applyConstraints({ advanced:[{ focusMode:'continuous' }] });
+  }catch(e){}
+}
 function manualCapture(){
   if (mode !== 'run' || !ref) return;
   initAudio();
@@ -670,7 +697,7 @@ function manualCapture(){
   beginFocus(performance.now());
 }
 function fail(title, detail){
-  state = 'wait_removal'; tEmptySince = 0; lastMsg = { ok:false };
+  state = 'wait_removal'; tEmptySince = 0; snap = null; lastMsg = { ok:false }; restoreFocus();
   sounds.err(); flash('#D9433D'); drawOverlay();
   setStatus('err', 'Échec : ' + title, detail + ' Retirez la boîte et reposez-la pour réessayer.', runActions());
 }
@@ -688,7 +715,7 @@ async function save(){
     await photoPut({ id, name, blob, w:bestCv.width, h:bestCv.height, sharp:bestSharp, exported:false });
     sharpHistory.push(bestSharp); if (sharpHistory.length > 15) sharpHistory.shift(); store.set('petri.sharp', sharpHistory);
     const total = await photoCount(); $('countBadge').textContent = total;
-    state = 'wait_removal'; tEmptySince = 0; lastMsg = { ok:true };
+    state = 'wait_removal'; tEmptySince = 0; snap = null; lastMsg = { ok:true }; restoreFocus();
     sounds.ok(); flash('#1E9E5E'); drawOverlay();
     setStatus('ok', 'Photo enregistrée', name.replace('.jpg', '') + ', ' + total + ' photo' + (total > 1 ? 's' : '') + ' au total. Retirez la boîte.', runActions());
   }catch(e){
