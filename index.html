@@ -222,7 +222,7 @@ select{width:100%;min-height:44px;border:1px solid var(--line);border-radius:10p
     </div>
 
     <div class="group-title">Contrôles</div>
-    <label class="check"><input type="checkbox" id="cLid"> Exiger le couvercle dans son cercle</label>
+    <label class="check"><input type="checkbox" id="cLid"> Socle du couvercle : cercle et détection automatique du couvercle</label>
     <label class="check"><input type="checkbox" id="cSharp"> Refuser les images floues</label>
     <label class="check"><input type="checkbox" id="cMeters"> Afficher les mesures</label>
     <label class="check"><input type="checkbox" id="cSound"> Sons</label>
@@ -242,7 +242,7 @@ select{width:100%;min-height:44px;border:1px solid var(--line);border-radius:10p
     <h2>Photographier les boîtes sans toucher l'écran</h2>
     <p>Fixez l'appareil sur son support, caméra arrière vers le socle.</p>
     <ol>
-      <li>Placez les deux cercles : la boîte ouverte et son couvercle.</li>
+      <li>Placez les cercles : la boîte ouverte et, si le socle du couvercle est activé dans les réglages, son couvercle.</li>
       <li>Validez avec le socle vide.</li>
       <li>Posez chaque boîte : la photo part toute seule, un bip confirme.</li>
     </ol>
@@ -435,6 +435,9 @@ function defaultCalib(){
 const mn = () => Math.min(W, H);
 function circlePx(c){ return { cx:c.x*W, cy:c.y*H, r:c.r*mn() }; }
 
+const lidOn = () => !!settings.requireLid;
+const circleKeys = () => lidOn() ? ['dish','lid'] : ['dish'];
+const placeMsg = () => lidOn() ? 'Posez une boîte ouverte et son couvercle dans leurs cercles.' : 'Posez une boîte ouverte dans son cercle.';
 function buildMasks(){
   const d = [], l = [], o = [], m = Math.min(aw, ah);
   const D = { x:calib.dish.x*aw, y:calib.dish.y*ah, r:calib.dish.r*m };
@@ -442,9 +445,10 @@ function buildMasks(){
   for (let y = 0; y < ah; y++) for (let x = 0; x < aw; x++){
     const px = x + .5, py = y + .5, i = y*aw + x;
     const dd = Math.hypot(px - D.x, py - D.y), dl = Math.hypot(px - L.x, py - L.y);
+    const lid = lidOn();
     if (dd < D.r * .92) d.push(i);
-    else if (dl < L.r * .92) l.push(i);
-    else if (dd > D.r * 1.2 && dl > L.r * 1.2) o.push(i);
+    else if (lid && dl < L.r * .92) l.push(i);
+    else if (dd > D.r * 1.2 && (!lid || dl > L.r * 1.2)) o.push(i);
   }
   idxDish = Int32Array.from(d); idxLid = Int32Array.from(l); idxOut = Int32Array.from(o);
 }
@@ -461,7 +465,7 @@ function drawOverlay(){
   if (mode === 'run'){
     stroke = { empty:'#E9EFEE', settling:'#E3A82B', focusing:'#E3A82B', saving:'#E3A82B', wait_removal: lastMsg && lastMsg.ok === false ? '#D9433D' : '#1E9E5E' }[state] || '#E9EFEE';
   }
-  ['dish','lid'].forEach(k => {
+  circleKeys().forEach(k => {
     const c = circlePx(calib[k]);
     const g = el('g', { 'data-k':k });
     if (mode === 'calib'){
@@ -512,8 +516,8 @@ function enterCalib(reason){
   mode = 'calib'; state = 'idle'; ref = null;
   if (!calib || Math.abs(calib.aspect - W/H) > 0.02) calib = defaultCalib();
   drawOverlay();
-  setStatus('idle', 'Placez les deux cercles',
-    (reason ? reason + ' ' : '') + "Faites glisser chaque cercle, la poignée à droite change sa taille. Laissez le socle vide, puis validez.",
+  setStatus('idle', lidOn() ? 'Placez les deux cercles' : 'Placez le cercle de la boîte',
+    (reason ? reason + ' ' : '') + (lidOn() ? "Faites glisser chaque cercle, la poignée à droite change sa taille." : "Faites glisser le cercle, la poignée à droite change sa taille.") + " Laissez le socle vide, puis validez.",
     [{ label:'Valider (socle vide)', primary:true, fn: () => startRun(false) }]);
 }
 async function startRun(silent){
@@ -521,7 +525,7 @@ async function startRun(silent){
   buildMasks(); mode = 'run';
   await takeReference();
   state = 'empty'; lastMsg = null; drawOverlay();
-  setStatus('wait', 'Prêt', 'Posez une boîte ouverte et son couvercle dans leurs cercles.', runActions());
+  setStatus('wait', 'Prêt', placeMsg(), runActions());
   if (!silent) toast('Fond vide enregistré.');
 }
 async function takeReference(){
@@ -585,7 +589,7 @@ function sharpness(){
   const m = s/k; return s2/k - m*m;
 }
 function cropRect(){
-  const a = circlePx(calib.dish), b = circlePx(calib.lid), pad = 1.08;
+  const a = circlePx(calib.dish), b = lidOn() ? circlePx(calib.lid) : a, pad = 1.08;
   let x0 = Math.min(a.cx - a.r*pad, b.cx - b.r*pad), y0 = Math.min(a.cy - a.r*pad, b.cy - b.r*pad);
   let x1 = Math.max(a.cx + a.r*pad, b.cx + b.r*pad), y1 = Math.max(a.cy + a.r*pad, b.cy + b.r*pad);
   x0 = Math.max(0, Math.floor(x0)); y0 = Math.max(0, Math.floor(y0));
@@ -609,7 +613,7 @@ function loop(){
   const a = analyse(), now = performance.now(), P = settings.presence / 100;
   if (settings.meters){
     $('mDish').textContent = Math.round(a.fDish*100) + ' %';
-    $('mLid').textContent = Math.round(a.fLid*100) + ' %';
+    $('mLid').textContent = lidOn() ? Math.round(a.fLid*100) + ' %' : '–';
     $('mMotion').textContent = a.motion.toFixed(1);
   }
   switch (state){
@@ -646,7 +650,7 @@ function loop(){
 }
 function toEmpty(){
   state = 'empty'; tEmptySince = 0; drawOverlay();
-  setStatus('wait', 'Prêt', 'Posez une boîte ouverte et son couvercle dans leurs cercles.', runActions());
+  setStatus('wait', 'Prêt', placeMsg(), runActions());
 }
 async function beginFocus(now){
   state = 'focusing'; tFocus = now; bestSharp = -1; drawOverlay();
@@ -788,7 +792,11 @@ function bindCheck(id, key, after){
   const c = $(id); c.checked = !!settings[key];
   c.addEventListener('change', () => { settings[key] = c.checked; store.set('petri.settings', settings); after && after(); });
 }
-bindCheck('cLid', 'requireLid'); bindCheck('cSharp', 'sharpCheck'); bindCheck('cSound', 'sound');
+bindCheck('cLid', 'requireLid', () => {
+  if (calib && W){ buildMasks(); drawOverlay(); }
+  if (mode === 'calib') enterCalib();
+  else if (mode === 'run' && state === 'empty') setStatus('wait', 'Prêt', placeMsg(), runActions());
+}); bindCheck('cSharp', 'sharpCheck'); bindCheck('cSound', 'sound');
 bindCheck('cMeters', 'meters', () => $('meters').classList.toggle('hidden', !settings.meters));
 $('meters').classList.toggle('hidden', !settings.meters);
 $('tOk').addEventListener('click', () => { initAudio(); const s = settings.sound; settings.sound = true; sounds.ok(); settings.sound = s; });
