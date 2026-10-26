@@ -19,6 +19,7 @@
 <script src="https://cdn.jsdelivr.net/npm/js-aruco2@2.0.0/src/aruco.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/js-aruco2@2.0.0/src/dictionaries/aruco_4x4_1000.js"></script>
 <style>
+@font-face{font-family:"ByteBounce";src:url("fonts/ByteBounce.ttf") format("truetype");font-display:swap}
 /* Style rétro : fond beige, encre noire, police pixelisée. Toujours affiché en paysage. */
 :root{
   --bg:#EFE6D2; --paper:#F8F2E4; --ink:#1A1A1A; --muted:#5E5546;
@@ -36,8 +37,9 @@
 html{height:100%;scroll-padding-top:env(safe-area-inset-top,0px)}
 body{
   height:100%;margin:0;background:var(--bg);color:var(--ink);
-  font-family:"Pixelify Sans",ui-monospace,"Courier New",monospace;
-  font-size:17px;line-height:1.35;-webkit-tap-highlight-color:transparent;
+  /* ByteBounce n'a pas tous les accents : Pixelify Sans prend le relais pour les caractères manquants */
+  font-family:"ByteBounce","Pixelify Sans",ui-monospace,"Courier New",monospace;
+  font-size:19px;line-height:1.35;-webkit-tap-highlight-color:transparent;
   display:grid;grid-template-columns:var(--side) 1fr;overflow:hidden;
   padding-left:env(safe-area-inset-left,0px);padding-right:env(safe-area-inset-right,0px);
 }
@@ -47,7 +49,10 @@ button{cursor:pointer}
 
 /* Panneau de gauche : titre, mascotte et bulle, boutons ; l'aperçu occupe la droite */
 .side{display:flex;flex-direction:column;gap:.7rem;padding:.7rem .3rem .8rem 1rem;min-height:0;overflow:auto}
-.brand{display:flex;align-items:baseline;gap:.6rem;white-space:nowrap}
+.brand{display:flex;align-items:center;gap:.6rem;white-space:nowrap}
+.flag{margin-left:auto;padding:3px;min-height:0;border:var(--b) solid var(--ink);background:var(--paper);box-shadow:var(--b) var(--b) 0 var(--ink);line-height:0;cursor:pointer}
+.flag:active{transform:translate(var(--b),var(--b));box-shadow:none}
+.flag svg{width:32px;height:20px;display:block;shape-rendering:crispEdges}
 .nav{display:grid;grid-template-columns:1fr 1fr;gap:.55rem;margin-top:auto;padding:0 var(--b) var(--b) 0}
 .nav .btn{justify-content:center}
 .brand h1{font-size:1.2rem;margin:0;font-weight:700;letter-spacing:.08em;text-transform:uppercase}
@@ -65,27 +70,16 @@ button{cursor:pointer}
 
 /* Mascotte au-dessus de sa bulle ; la bulle reprend le message et ses boutons */
 main{position:relative;display:grid;min-height:0;padding:.6rem 1rem .8rem .6rem}
-.talk{display:flex;flex-direction:column;align-items:center;gap:1rem;min-height:0}
-.bubble{
-  position:relative;align-self:stretch;display:flex;flex-direction:column;gap:.6rem;
-  background:var(--paper);border:var(--b) solid var(--ink);padding:.55rem .75rem;
-  box-shadow:var(--b) var(--b) 0 var(--ink);
-}
-/* queue de la bulle, en marches d'escalier, vers la mascotte au-dessus */
-.bubble::before,.bubble::after{
-  content:'';position:absolute;left:50%;width:18px;height:15px;transform:translateX(-50%);
-  clip-path:polygon(0 100%,100% 100%,100% 60%,83% 60%,83% 40%,67% 40%,67% 20%,56% 20%,56% 0,44% 0,44% 20%,33% 20%,33% 40%,17% 40%,17% 60%,0 60%);
-}
-.bubble::before{top:-15px;background:var(--ink)}
-.bubble::after{top:-10px;background:var(--paper)}
-.bubble .txt{display:flex;flex-direction:column;min-width:0}
-.bubble .big{font-size:clamp(1.1rem,4.4vh,1.9rem);font-weight:700;line-height:1.1}
-.bubble .small{font-size:clamp(.85rem,2.7vh,1.1rem);color:var(--muted)}
-.bubble[data-tone="ok"] .big{color:var(--ok)}
-.bubble[data-tone="err"] .big{color:var(--err)}
-.bubble .actions{display:flex;flex-direction:column;gap:.5rem}
-.bubble .actions:empty{display:none}
-.bubble .actions .btn{justify-content:center}
+.talk{display:flex;flex-direction:column;align-items:center;gap:.6rem;min-height:0}
+/* messages courts, en simple texte noir */
+.status{align-self:stretch;display:flex;flex-direction:column;gap:.55rem}
+.status .txt{display:flex;flex-direction:column;gap:.15rem;min-width:0}
+.status .big{font-size:clamp(1.15rem,4.6vh,1.9rem);font-weight:700;line-height:1.1}
+.status .small{font-size:clamp(.9rem,2.9vh,1.15rem);line-height:1.25}
+.status .actions{display:flex;flex-wrap:wrap;gap:.5rem;padding:0 var(--b) var(--b) 0}
+.status .actions .btn{flex:1 1 auto}
+.status .actions:empty{display:none}
+.status .actions .btn{justify-content:center}
 
 .stage{container-type:size;display:grid;place-items:center;min-height:0}
 .frame{
@@ -125,71 +119,11 @@ svg#overlay{position:absolute;inset:0;width:100%;height:100%;touch-action:none}
 .btn.lens[hidden]{display:none}
 .meters.hidden{display:none}
 
-/* Mascotte : boîte de Petri en pixel art, en relief (couches empilées en 3D, dessinées par le script) */
-.mascot{--s:5px;--look:-24deg;--spin:1s;position:relative;flex:none;width:calc(16*var(--s));height:calc(22*var(--s));perspective:calc(90*var(--s))}
-.mascot svg{display:block;width:100%;height:100%;shape-rendering:crispEdges}
-.m-shadow{
-  position:absolute;left:15%;bottom:calc(-.5*var(--s));width:70%;height:calc(2.5*var(--s));
-  background:rgba(26,26,26,.2);border-radius:50%;transition:transform .4s ease;
-}
-.m-body{
-  position:absolute;left:0;bottom:0;width:calc(16*var(--s));height:calc(16*var(--s));
-  transform-style:preserve-3d;transform-origin:50% 85%;
-  transform:translateY(0) rotateX(62deg) rotateY(0deg);
-  transition:transform .5s cubic-bezier(.34,1.5,.6,1);
-}
-.m-disc{position:absolute;inset:0;transform-style:preserve-3d}
-.m-disc svg{position:absolute;inset:0}
-.m-side{transform:translateZ(calc(var(--z)*var(--s)*-1))} /* épaisseur du verre */
-.m-legs{
-  position:absolute;left:0;bottom:0;width:calc(16*var(--s));height:calc(5*var(--s)) !important;
-  transform:scaleY(0);transform-origin:50% 0;transition:transform .12s ease;
-}
-/* attente : couchée, elle tourne comme un disque d'Euler (vitesse tirée au hasard) */
-.mascot:is([data-pose="spin"],[data-pose="hop"]) .m-disc{animation:euler var(--spin) linear infinite}
-.mascot:is([data-pose="spin"],[data-pose="hop"]) .m-face{animation:turn calc(var(--spin)*5) linear infinite}
-/* petit saut sur place */
-.mascot[data-pose="hop"] .m-body{animation:hop .6s ease-out}
-.mascot[data-pose="hop"] .m-shadow{animation:shadow-hop .6s ease-out}
-/* debout sur ses jambes (parole ou geste au hasard), tournée de 3/4 pour montrer son épaisseur */
-.mascot:is([data-pose="talk"],[data-pose="stand"]) .m-body{transform:translateY(calc(-5*var(--s))) rotateX(0deg) rotateY(var(--look))}
-.mascot:is([data-pose="talk"],[data-pose="stand"]) .m-legs{transform:scaleY(1);transition:transform .25s ease .15s}
-.mascot:is([data-pose="talk"],[data-pose="stand"]) .m-shadow{transform:scaleX(.6)}
-.mascot[data-pose="talk"] .m-mouth{animation:yap .3s steps(1) infinite}
-/* elle retombe à plat, avec un rebond */
-.mascot[data-pose="fall"] .m-body{animation:fall .8s forwards}
-@keyframes euler{
-  0%{transform:rotate3d(1,0,0,16deg)}
-  12.5%{transform:rotate3d(.71,.71,0,16deg)}
-  25%{transform:rotate3d(0,1,0,16deg)}
-  37.5%{transform:rotate3d(-.71,.71,0,16deg)}
-  50%{transform:rotate3d(-1,0,0,16deg)}
-  62.5%{transform:rotate3d(-.71,-.71,0,16deg)}
-  75%{transform:rotate3d(0,-1,0,16deg)}
-  87.5%{transform:rotate3d(.71,-.71,0,16deg)}
-  100%{transform:rotate3d(1,0,0,16deg)}
-}
-@keyframes hop{
-  0%{transform:translateY(0) rotateX(62deg) rotateY(0deg)}
-  40%{transform:translateY(calc(-4*var(--s))) rotateX(48deg) rotateY(0deg)}
-  70%{transform:translateY(0) rotateX(68deg) rotateY(0deg)}
-  100%{transform:translateY(0) rotateX(62deg) rotateY(0deg)}
-}
-@keyframes shadow-hop{40%{transform:scaleX(.7);opacity:.6}}
-@keyframes fall{
-  0%{transform:translateY(calc(-5*var(--s))) rotateX(0deg) rotateY(var(--look));animation-timing-function:cubic-bezier(.55,0,.9,.4)}
-  55%{transform:translateY(0) rotateX(72deg) rotateY(0deg);animation-timing-function:ease-out}
-  72%{transform:translateY(calc(-1.5*var(--s))) rotateX(54deg) rotateY(0deg);animation-timing-function:ease-in}
-  87%{transform:translateY(0) rotateX(66deg) rotateY(0deg)}
-  100%{transform:translateY(0) rotateX(62deg) rotateY(0deg)}
-}
-@keyframes turn{to{transform:rotate(-360deg)}}
-@keyframes yap{50%{transform:scaleY(2.5)}}
-.m-mouth{transform-box:fill-box;transform-origin:50% 0}
+/* Mascotte : boîte de Petri en pixel art, dessinée image par image dans un canevas (voir le script) */
+.mascot{--s:4px;flex:none;width:calc(28*var(--s));height:calc(30*var(--s))}
+.mascot canvas{display:block;width:100%;height:100%;image-rendering:pixelated}
 
 @media (prefers-reduced-motion: reduce){
-  .mascot[data-pose] .m-disc,.mascot[data-pose] .m-face,.mascot[data-pose] .m-mouth,.mascot[data-pose] .m-body,.mascot[data-pose] .m-shadow{animation:none}
-  .m-body,.m-legs{transition-duration:.15s}
   .frame[data-tone="busy"]{animation-duration:2.4s}
   .flash.go{animation-duration:.35s}
 }
@@ -240,7 +174,7 @@ select{width:100%;min-height:44px;border:var(--b) solid var(--ink);border-radius
   max-width:46rem;display:flex;align-items:center;gap:2rem;
   background:var(--paper);border:var(--b) solid var(--ink);box-shadow:8px 8px 0 var(--ink);padding:1.4rem 1.8rem;
 }
-.start-card .mascot{--s:7px}
+.start-card .mascot{--s:6px}
 .start h2{font-size:clamp(1.4rem,3.4vw,2.1rem);line-height:1.1;margin:0 0 .7rem}
 .start p{margin:0 0 .7rem;color:var(--muted)}
 .start ol{padding-left:1.3rem;margin:0 0 1.2rem}
@@ -266,7 +200,7 @@ body.manual .meters,body.manual .btn.lens{display:none}
 
 /* L'app est prévue pour le paysage : en portrait, on demande de tourner l'appareil */
 .rotate{position:fixed;inset:0;z-index:50;background:var(--bg);display:none;place-items:center;align-content:center;gap:1.2rem;padding:2rem;text-align:center}
-.rotate .mascot{--s:8px}
+.rotate .mascot{--s:7px}
 .rotate p{font-size:1.4rem;font-weight:700;margin:0}
 @media (orientation:portrait){ .rotate{display:grid} }
 /* paysage peu haut (téléphone) : on resserre */
@@ -276,30 +210,30 @@ body.manual .meters,body.manual .btn.lens{display:none}
   .nav{gap:.4rem}
   .brand h1{font-size:1rem}
   main{padding:.4rem .7rem .5rem .4rem}
-  .mascot{--s:4px}
+  .mascot{--s:3px}
   .screen{--fit:.98}
   .meters{font-size:.68rem;padding:.2rem .4rem}
-  .bubble{padding:.3rem .6rem}
-  .start-card .mascot{--s:5px}
+  .start-card .mascot{--s:4px}
 }
 </style>
 </head>
 <body>
 
 <aside class="side">
-  <div class="brand"><h1>Petri·Capture</h1><span class="ver" id="ver"></span></div>
+  <div class="brand"><h1>Petri·Capture</h1><span class="ver" id="ver"></span>
+    <button class="flag" id="btnLang" type="button"></button></div>
   <div class="talk">
-    <div class="mascot" id="mascot" data-pose="spin" aria-hidden="true"></div>
-    <div class="bubble" id="status" data-tone="idle" role="status" aria-live="polite">
-      <div class="txt"><span class="big" id="stBig">En attente</span><span class="small" id="stSmall"></span></div>
+    <div class="mascot" id="mascot" aria-hidden="true"></div>
+    <div class="status" id="status" data-tone="idle" role="status" aria-live="polite">
+      <div class="txt"><span class="big" id="stBig"></span><span class="small" id="stSmall"></span></div>
       <div class="actions" id="stActions"></div>
     </div>
   </div>
   <nav class="nav">
-    <button class="btn" id="btnCalib" type="button">Calibrer</button>
-    <button class="btn" id="btnPhotos" type="button">Photos <span class="count" id="countBadge">0</span></button>
-    <button class="btn" id="btnSettings" type="button">Réglages</button>
-    <button class="btn" id="btnFull" type="button" aria-label="Plein écran">⛶ Plein écran</button>
+    <button class="btn" id="btnCalib" type="button" data-i18n="calibrate"></button>
+    <button class="btn" id="btnPhotos" type="button"><span data-i18n="photos"></span> <span class="count" id="countBadge">0</span></button>
+    <button class="btn" id="btnSettings" type="button" data-i18n="settings"></button>
+    <button class="btn" id="btnFull" type="button"><span aria-hidden="true">⛶</span> <span data-i18n="fullscreen"></span></button>
   </nav>
 </aside>
 
@@ -310,16 +244,16 @@ body.manual .meters,body.manual .btn.lens{display:none}
         <video id="video" playsinline muted autoplay></video>
         <svg id="overlay" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid meet"></svg>
         <div class="flash" id="flash"></div>
-        <button class="btn lens" id="btnLens" type="button" hidden>Objectif</button>
+        <button class="btn lens" id="btnLens" type="button" hidden data-i18n="lens"></button>
         <div class="meters" id="meters">
-          <span>Boîte</span><b id="mDish">–</b>
-          <span>Couvercle</span><b id="mLid">–</b>
-          <span>Mouvement</span><b id="mMotion">–</b>
-          <span>Netteté</span><b id="mSharp">–</b>
+          <span data-i18n="dish"></span><b id="mDish">–</b>
+          <span data-i18n="lid"></span><b id="mLid">–</b>
+          <span data-i18n="motion"></span><b id="mMotion">–</b>
+          <span data-i18n="sharpness"></span><b id="mSharp">–</b>
         </div>
         <div class="manual-bar">
-          <button class="btn" id="btnManCancel" type="button">Annuler</button>
-          <button class="btn primary" id="btnManOk" type="button">Confirmer</button>
+          <button class="btn" id="btnManCancel" type="button" data-i18n="cancel"></button>
+          <button class="btn primary" id="btnManOk" type="button" data-i18n="confirm"></button>
         </div>
       </div>
     </div>
@@ -328,91 +262,91 @@ body.manual .meters,body.manual .btn.lens{display:none}
 
 <div class="scrim" id="scrim"></div>
 
-<aside class="sheet" id="sheetPhotos" aria-label="Photos enregistrées">
-  <div class="sheet-head"><h2>Photos enregistrées</h2><button class="btn" data-close type="button">Fermer</button></div>
+<aside class="sheet" id="sheetPhotos">
+  <div class="sheet-head"><h2 data-i18n="savedPhotos"></h2><button class="btn" data-close type="button" data-i18n="close"></button></div>
   <div class="sheet-body"><div class="grid" id="grid"></div></div>
   <div class="sheet-foot">
-    <button class="btn primary" id="btnShare" type="button">Enregistrer dans la galerie</button>
-    <button class="btn" id="btnZip" type="button">Télécharger en .zip</button>
-    <button class="btn danger" id="btnClearExported" type="button">Supprimer les photos exportées</button>
-    <p class="note" id="exportNote">Les photos restent dans l'app tant que vous ne les supprimez pas.</p>
+    <button class="btn primary" id="btnShare" type="button" data-i18n="share"></button>
+    <button class="btn" id="btnZip" type="button" data-i18n="zip"></button>
+    <button class="btn danger" id="btnClearExported" type="button" data-i18n="clearExported"></button>
+    <p class="note" data-i18n="exportNote"></p>
   </div>
 </aside>
 
-<aside class="sheet" id="sheetSettings" aria-label="Réglages">
-  <div class="sheet-head"><h2>Réglages</h2><button class="btn" data-close type="button">Fermer</button></div>
+<aside class="sheet" id="sheetSettings">
+  <div class="sheet-head"><h2 data-i18n="settings"></h2><button class="btn" data-close type="button" data-i18n="close"></button></div>
   <div class="sheet-body">
-    <div class="group-title">Détection</div>
+    <div class="group-title" data-i18n="grpDetect"></div>
     <div class="field">
-      <label for="sSens">Seuil de différence <span id="vSens"></span></label>
+      <label for="sSens"><span data-i18n="sSens"></span> <span id="vSens"></span></label>
       <input type="range" id="sSens" min="6" max="60" step="1">
-      <p>Plus bas, l'app réagit à de plus petits changements par rapport au socle vide.</p>
+      <p data-i18n="sSensHelp"></p>
     </div>
     <div class="field">
-      <label for="sPresence">Surface occupée pour détecter <span id="vPresence"></span></label>
+      <label for="sPresence"><span data-i18n="sPresence"></span> <span id="vPresence"></span></label>
       <input type="range" id="sPresence" min="5" max="70" step="1">
-      <p>Part du cercle « Boîte » qui doit changer. Regardez la mesure « Boîte » avec une boîte posée pour régler.</p>
+      <p data-i18n="sPresenceHelp"></p>
     </div>
     <div class="field">
-      <label for="sStable">Attente après détection <span id="vStable"></span></label>
+      <label for="sStable"><span data-i18n="sStable"></span> <span id="vStable"></span></label>
       <input type="range" id="sStable" min="300" max="4000" step="100">
     </div>
     <div class="field">
-      <label for="sMotion">Tolérance au mouvement <span id="vMotion"></span></label>
+      <label for="sMotion"><span data-i18n="sMotion"></span> <span id="vMotion"></span></label>
       <input type="range" id="sMotion" min="1" max="10" step="0.5">
-      <p>Plus haut, l'app accepte davantage de mouvement (vibrations, main proche). Comparez avec la mesure « Mouvement ».</p>
+      <p data-i18n="sMotionHelp"></p>
     </div>
     <div class="field">
-      <label for="sFocus">Durée de mise au point <span id="vFocus"></span></label>
+      <label for="sFocus"><span data-i18n="sFocus"></span> <span id="vFocus"></span></label>
       <input type="range" id="sFocus" min="500" max="4000" step="100">
-      <p>L'app garde l'image la plus nette obtenue pendant cette durée.</p>
+      <p data-i18n="sFocusHelp"></p>
     </div>
 
-    <div class="group-title">Contrôles</div>
-    <label class="check"><input type="checkbox" id="cLid"> Socle du couvercle : cercle et détection automatique du couvercle</label>
-    <label class="check"><input type="checkbox" id="cSharp"> Refuser les images floues</label>
-    <label class="check"><input type="checkbox" id="cLock"> Verrouiller la mise au point après la première photo (plus rapide)</label>
-    <label class="check"><input type="checkbox" id="cMeters"> Afficher les mesures</label>
-    <label class="check"><input type="checkbox" id="cSound"> Sons</label>
-    <div class="row"><button class="btn" id="tOk" type="button">Tester le son de réussite</button><button class="btn" id="tErr" type="button">Tester le son d'erreur</button></div>
+    <div class="group-title" data-i18n="grpChecks"></div>
+    <label class="check"><input type="checkbox" id="cLid"> <span data-i18n="cLid"></span></label>
+    <label class="check"><input type="checkbox" id="cSharp"> <span data-i18n="cSharp"></span></label>
+    <label class="check"><input type="checkbox" id="cLock"> <span data-i18n="cLock"></span></label>
+    <label class="check"><input type="checkbox" id="cMeters"> <span data-i18n="cMeters"></span></label>
+    <label class="check"><input type="checkbox" id="cSound"> <span data-i18n="cSound"></span></label>
+    <div class="row"><button class="btn" id="tOk" type="button" data-i18n="tOk"></button><button class="btn" id="tErr" type="button" data-i18n="tErr"></button></div>
 
-    <div class="group-title">Caméra</div>
-    <div class="field"><select id="camSelect" aria-label="Caméra"></select><p id="camInfo"></p></div>
-    <div class="row"><button class="btn" id="btnRef" type="button">Reprendre le fond vide</button></div>
+    <div class="group-title" data-i18n="grpCamera"></div>
+    <div class="field"><select id="camSelect" data-i18n-aria="grpCamera"></select><p id="camInfo"></p></div>
+    <div class="row"><button class="btn" id="btnRef" type="button" data-i18n="btnRef"></button></div>
 
-    <div class="group-title">Calibration</div>
+    <div class="group-title" data-i18n="grpCalib"></div>
     <div class="field">
-      <label for="selCalib">Mode de calibration</label>
+      <label for="selCalib" data-i18n="selCalib"></label>
       <select id="selCalib">
-        <option value="aruco">Automatique : marqueurs ArUco</option>
-        <option value="manuel">Manuel : cercles à placer</option>
+        <option value="aruco" data-i18n="optAruco"></option>
+        <option value="manuel" data-i18n="optManual"></option>
       </select>
-      <p>Utilisé par le bouton « Calibrer » et au démarrage. En automatique, la calibration manuelle reste proposée si les marqueurs ne sont pas trouvés.</p>
+      <p data-i18n="selCalibHelp"></p>
     </div>
-    <div class="row"><button class="btn" id="btnCalib2" type="button">Calibrer maintenant</button></div>
+    <div class="row"><button class="btn" id="btnCalib2" type="button" data-i18n="calibNow"></button></div>
   </div>
 </aside>
 
 <section class="start" id="start">
   <div class="start-card">
-    <div class="mascot" data-pose="spin" aria-hidden="true"></div>
+    <div class="mascot" aria-hidden="true"></div>
     <div>
-    <h2>Photographier les boîtes sans toucher l'écran</h2>
-    <p>Fixez l'appareil sur son support, caméra arrière vers le socle.</p>
+    <h2 data-i18n="startTitle"></h2>
+    <p data-i18n="startIntro"></p>
     <ol>
-      <li>Laissez le socle vide : l'app repère les marqueurs ArUco et place les cercles toute seule.</li>
-      <li>Vérifiez les cercles affichés, puis enregistrez.</li>
-      <li>Posez chaque boîte : la photo part toute seule, un bip confirme.</li>
+      <li data-i18n="step1"></li>
+      <li data-i18n="step2"></li>
+      <li data-i18n="step3"></li>
     </ol>
-    <button class="btn primary" id="btnStart" type="button">Démarrer la caméra</button>
+    <button class="btn primary" id="btnStart" type="button" data-i18n="start"></button>
     <div class="error-box" id="startError"></div>
     </div>
   </div>
 </section>
 
 <div class="rotate" id="rotate">
-  <div class="mascot" data-pose="spin" aria-hidden="true"></div>
-  <p>Tournez l'appareil en paysage.</p>
+  <div class="mascot" aria-hidden="true"></div>
+  <p data-i18n="rotate"></p>
 </div>
 
 <div class="toast" id="toast" role="status"></div>
@@ -421,57 +355,140 @@ body.manual .meters,body.manual .btn.lens{display:none}
 (() => {
 'use strict';
 const $ = id => document.getElementById(id);
-const APP_VERSION = 'v7 · 26/10'; // à incrémenter à chaque publication
+const APP_VERSION = 'v8 · 26/10'; // à incrémenter à chaque publication
 $('ver').textContent = APP_VERSION;
 
-/* ---------- Mascotte : boîte de Petri en pixel art 16 × 16, en relief ---------- */
-(function drawMascots(){
-  const INK = '#1A1A1A', GLASS = '#D6E6E2', AGAR = '#F2C46B', EDGE = '#9DB7B1';
-  const cell = (px, x, y, f) => px.push('<rect x="' + x + '" y="' + y + '" width="1" height="1" fill="' + f + '"/>');
-  const disc = (fill) => { const px = []; for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++){
-    const d = Math.hypot(x - 7.5, y - 7.5); if (d <= 7.6) cell(px, x, y, fill(d)); } return px; };
-  const px = disc(d => d > 6.6 ? INK : d > 5.7 ? GLASS : AGAR);
-  [[3,5],[4,4],[5,3]].forEach(([x, y]) => cell(px, x, y, '#FFFFFF'));                 // reflet du verre
-  [[4,10],[5,10],[4,11],[11,4],[10,11]].forEach(([x, y]) => cell(px, x, y, '#D9663F')); // colonies
-  [[5,6],[5,7],[10,6],[10,7]].forEach(([x, y]) => cell(px, x, y, INK));               // yeux
-  const face = '<svg class="m-face" viewBox="0 0 16 16">' + px.join('') + '<rect class="m-mouth" x="7" y="9" width="2" height="1" fill="' + INK + '"/></svg>';
-  // tranche du verre : trois couches empilées derrière la face
-  const sideSvg = disc(d => d > 6.6 ? INK : EDGE).join('');
-  const sides = [3, 2, 1].map(z => '<svg class="m-side" style="--z:' + z + '" viewBox="0 0 16 16">' + sideSvg + '</svg>').join('');
-  const legs = '<svg class="m-legs" viewBox="0 0 16 5"><rect x="5" y="0" width="1" height="4" fill="' + INK + '"/><rect x="10" y="0" width="1" height="4" fill="' + INK + '"/>'
-    + '<rect x="4" y="4" width="2" height="1" fill="' + INK + '"/><rect x="10" y="4" width="2" height="1" fill="' + INK + '"/></svg>';
-  document.querySelectorAll('.mascot').forEach(m => { m.innerHTML = '<div class="m-shadow"></div><div class="m-body"><div class="m-disc">' + sides + face + '</div></div>' + legs; });
-})();
-/* Pendant les attentes, la mascotte tourne et fait de temps en temps un geste au hasard :
-   elle se relève puis retombe, saute sur place, ou change de vitesse. Elle se lève aussi pour « dire » chaque nouveau message. */
+/* ---------- Mascotte : boîte de Petri en pixel art, rendue image par image ----------
+   Petit moteur 3D en pixels : la tranche du verre est échantillonnée dans l'espace, la face est retrouvée pixel par pixel
+   (lancer de rayon sur son plan), le tout passe par un tampon de profondeur sur une grille 28 × 30, puis est cerné de noir.
+   Une image toutes les 80 ms, comme une animation pixel art. */
+const MW = 28, MH = 30, GY = 24, CX = 14, MR = 8, MTH = 2.4, LEG = 5;
+const CE = Math.cos(35 * Math.PI / 180), SE = Math.sin(35 * Math.PI / 180); // caméra en plongée de 35°
+const MCOL = { ink:[26,26,26], glass:[214,230,226], agar:[242,196,107], edge:[157,183,177], dark:[118,142,136], col:[217,102,63], white:[255,255,255] };
 const calmMotion = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
 const rnd = (a, b) => a + Math.random()*(b - a);
-function mascotSet(m, pose, ms, next){
-  clearTimeout(m._t); m.dataset.pose = pose;
-  if (ms) m._t = setTimeout(next, ms);
+const dot = (p, q) => p[0]*q[0] + p[1]*q[1] + p[2]*q[2];
+function rot(v, k, a){ // rotation de v autour de l'axe unitaire k (formule de Rodrigues)
+  const c = Math.cos(a), s = Math.sin(a), d = dot(k, v) * (1 - c);
+  return [v[0]*c + (k[1]*v[2] - k[2]*v[1])*s + k[0]*d, v[1]*c + (k[2]*v[0] - k[0]*v[2])*s + k[1]*d, v[2]*c + (k[0]*v[1] - k[1]*v[0])*s + k[2]*d];
 }
-function mascotSpin(m){
-  m.style.setProperty('--spin', rnd(.75, 1.5).toFixed(2) + 's');
-  mascotSet(m, 'spin', calmMotion ? 0 : rnd(2500, 6500), () => mascotIdle(m));
+class Mascot{
+  constructor(el){
+    const c = document.createElement('canvas'); c.width = MW; c.height = MH; el.appendChild(c);
+    this.el = el; this.ctx = c.getContext('2d'); this.img = this.ctx.createImageData(MW, MH);
+    this.zb = new Float32Array(MW*MH); this.mask = new Uint8Array(MW*MH);
+    this.stand = 0; this.standV = 0; this.up = false; this.hop = 0; this.hopV = 0;
+    this.phi = Math.random()*6.3; this.psi = 0; this.speed = 1; this.look = 0; this.lookT = 0; this.talking = false; this.t = 0;
+    this.spin();
+  }
+  later(ms, fn){ clearTimeout(this.timer); if (ms != null) this.timer = setTimeout(fn, ms); }
+  // attente : couchée, elle tourne comme un disque d'Euler, puis fait un geste au hasard
+  spin(){ this.up = false; this.talking = false; this.speed = rnd(.75, 1.5); this.later(calmMotion ? null : rnd(2500, 6500), () => this.idle()); }
+  idle(){
+    const r = Math.random();
+    if (r < .45){ this.up = true; this.lookT = (Math.random() < .5 ? -1 : 1) * rnd(.25, .5); this.later(rnd(700, 1800), () => this.spin()); }
+    else if (r < .8){ if (!this.hop) this.hopV = 26; this.later(700, () => this.spin()); }
+    else this.spin();
+  }
+  // parole : elle se lève sur ses jambes et bouge la bouche
+  talk(){ this.up = true; this.talking = true; this.lookT = (Math.random() < .5 ? -1 : 1) * rnd(.15, .3); this.later(1700, () => this.spin()); }
+  step(dt){
+    this.t += dt;
+    if (this.up){ this.standV += (60*(1 - this.stand) - 8*this.standV) * dt; this.stand += this.standV * dt; } // ressort : se relève
+    else { // chute libre puis petits rebonds
+      this.standV -= 7*dt; this.stand += this.standV*dt;
+      if (this.stand < 0){ this.stand = 0; this.standV = this.standV < -.6 ? -this.standV*.3 : 0; }
+    }
+    this.look += ((this.up ? this.lookT : 0) - this.look) * Math.min(1, dt*6);
+    if (this.hop > 0 || this.hopV){ this.hopV -= 90*dt; this.hop += this.hopV*dt; if (this.hop <= 0){ this.hop = 0; this.hopV = 0; } }
+    if (!calmMotion){ this.phi += dt * 2*Math.PI / this.speed; this.psi -= dt * 2*Math.PI / (this.speed*5); }
+  }
+  render(){
+    const d = this.img.data, zb = this.zb, mask = this.mask;
+    d.fill(0); zb.fill(-1e9); mask.fill(0);
+    const s = Math.max(0, Math.min(1.12, this.stand)), s1 = Math.min(1, s), lie = 1 - s1;
+    const legs = Math.max(0, Math.min(1, (s - .55) / .4));
+    const C = [0, MTH/2 + (MR + LEG*legs - MTH/2)*s1 + this.hop, 0];
+    // orientation : debout face à nous (a droite, b haut, n vers nous), basculée en arrière pour se coucher
+    const X = [1, 0, 0], tilt = -(1 - s) * Math.PI/2;
+    let a = X, b = rot([0, 1, 0], X, tilt), n = rot([0, 0, 1], X, tilt);
+    const al = calmMotion ? 0 : 14 * Math.PI/180 * lie, k = [Math.cos(this.phi), 0, Math.sin(this.phi)]; // oscillation du disque d'Euler
+    if (al){ a = rot(a, k, al); b = rot(b, k, al); n = rot(n, k, al); }
+    const Y = [0, 1, 0], lk = this.look * s1;
+    a = rot(a, Y, lk); b = rot(b, Y, lk); n = rot(n, Y, lk);
+    let ps = Math.atan2(Math.sin(this.psi), Math.cos(this.psi)) * lie; // la face tourne quand elle est couchée, se redresse debout
+    const a2 = rot(a, n, ps), b2 = rot(b, n, ps); a = a2; b = b2;
+    const set = (i, c, al) => { d[i*4] = c[0]; d[i*4+1] = c[1]; d[i*4+2] = c[2]; d[i*4+3] = al == null ? 255 : al; };
+    const put = (P, c) => {
+      const sx = Math.floor(CX + P[0]), sy = Math.floor(GY - (P[1]*CE - P[2]*SE));
+      if (sx < 0 || sy < 0 || sx >= MW || sy >= MH) return;
+      const i = sy*MW + sx, z = P[2]*CE + P[1]*SE;
+      if (z > zb[i]){ zb[i] = z; set(i, c); mask[i] = 1; }
+    };
+    // tranche du verre
+    for (let j = 0; j < 220; j++){
+      const th = j / 220 * 2*Math.PI, cu = MR*Math.cos(th), cv = MR*Math.sin(th);
+      for (let h = -MTH/2; h <= MTH/2 + 1e-6; h += MTH/6)
+        put([C[0] + a[0]*cu + b[0]*cv + n[0]*h, C[1] + a[1]*cu + b[1]*cv + n[1]*h, C[2] + a[2]*cu + b[2]*cv + n[2]*h], h < -MTH/2 + .5 ? MCOL.dark : MCOL.edge);
+    }
+    // face visible : on lance un rayon par pixel jusqu'au plan de la face (ou du fond si elle nous tourne le dos)
+    const ED = [0, SE, CE], EU = [0, CE, -SE], nd = dot(n, ED), front = nd > 0, off = (front ? 1 : -1) * MTH/2;
+    const F = [C[0] + n[0]*off, C[1] + n[1]*off, C[2] + n[2]*off];
+    const open = this.talking && Math.floor(this.t / .15) % 2;
+    if (Math.abs(nd) > .04) for (let sy = 0; sy < MH; sy++) for (let sx = 0; sx < MW; sx++){
+      const U = GY - (sy + .5), Xs = sx + .5 - CX;
+      const Q0 = [Xs, U*EU[1], U*EU[2]], tt = dot([F[0] - Q0[0], F[1] - Q0[1], F[2] - Q0[2]], n) / nd;
+      const Q = [Q0[0] + ED[0]*tt, Q0[1] + ED[1]*tt, Q0[2] + ED[2]*tt], R = [Q[0] - F[0], Q[1] - F[1], Q[2] - F[2]];
+      const u = dot(R, a), v = dot(R, b), r = Math.hypot(u, v);
+      if (r > MR) continue;
+      const i = sy*MW + sx; if (tt <= zb[i]) continue;
+      let c;
+      if (!front) c = MCOL.edge;
+      else if (r > MR - .75) c = MCOL.ink;
+      else if (r > MR - 1.7) c = (Math.atan2(v, u) > 1.9 && Math.atan2(v, u) < 2.7) ? MCOL.white : MCOL.glass;
+      else if (Math.abs(Math.abs(u) - 2.6) < .6 && v > .4 && v < 2.6) c = MCOL.ink;                // yeux
+      else if (Math.abs(u) < 1.1 && v < -1.2 && v > (open ? -3.2 : -2.1)) c = MCOL.ink;          // bouche
+      else if (Math.hypot(u + 3.4, v + 2.8) < 1.2 || Math.hypot(u - 3.6, v - 3.4) < .8 || Math.hypot(u - 2.4, v + 4.3) < .75) c = MCOL.col; // colonies
+      else c = MCOL.agar;
+      zb[i] = tt; set(i, c); mask[i] = 1;
+    }
+    // jambes
+    if (legs > 0) [-2.6, 2.6].forEach(lx => {
+      const ly = -Math.sqrt(MR*MR - lx*lx), T = [C[0] + a[0]*lx + b[0]*ly, C[1] + a[1]*lx + b[1]*ly, C[2] + a[2]*lx + b[2]*ly];
+      for (let q = 0; q <= 1; q += .05){
+        const P = [T[0], T[1]*(1 - q), T[2]], sx = Math.floor(CX + P[0]), sy = Math.floor(GY - (P[1]*CE - P[2]*SE));
+        if (sx >= 0 && sy >= 0 && sx < MW && sy < MH && !mask[sy*MW + sx]) set(sy*MW + sx, MCOL.ink);
+      }
+      const fy = Math.floor(GY - (-T[2]*SE)), fx = Math.floor(CX + T[0]) + (lx < 0 ? -1 : 1);
+      if (fx >= 0 && fx < MW && fy >= 0 && fy < MH) set(fy*MW + fx, MCOL.ink);
+    });
+    // contour noir autour de la silhouette, puis ombre au sol
+    const edge = [];
+    for (let i = 0; i < MW*MH; i++){
+      if (mask[i] || d[i*4+3]) continue;
+      const x = i % MW, y = (i / MW) | 0;
+      if ((x > 0 && mask[i-1]) || (x < MW-1 && mask[i+1]) || (y > 0 && mask[i-MW]) || (y < MH-1 && mask[i+MW])) edge.push(i);
+    }
+    edge.forEach(i => set(i, MCOL.ink));
+    const rx = MR*(1 - .4*s1) - this.hop*.3;
+    for (let y = GY - 1; y <= GY + 1; y++) for (let x = 0; x < MW; x++){
+      const i = y*MW + x, dx = (x + .5 - CX) / rx, dy = (y + .5 - GY - .3) / 1.6;
+      if (!d[i*4+3] && dx*dx + dy*dy <= 1) set(i, MCOL.ink, 46);
+    }
+    this.ctx.putImageData(this.img, 0, 0);
+  }
 }
-function mascotFall(m){ mascotSet(m, 'fall', 800, () => mascotSpin(m)); }
-function mascotIdle(m){
-  const r = Math.random();
-  if (r < .45){ m.style.setProperty('--look', (Math.random() < .5 ? -1 : 1) * rnd(15, 30) + 'deg'); mascotSet(m, 'stand', rnd(700, 1800), () => mascotFall(m)); }
-  else if (r < .8) mascotSet(m, 'hop', 600, () => mascotSpin(m));
-  else mascotSpin(m);
-}
-document.querySelectorAll('.mascot').forEach(mascotSpin);
-function mascotTalk(){
-  const m = $('mascot');
-  if (m.dataset.pose !== 'talk' && m.dataset.pose !== 'stand') m.style.setProperty('--look', (Math.random() < .5 ? -1 : 1) * rnd(10, 20) + 'deg');
-  mascotSet(m, 'talk', 1700, () => mascotFall(m));
-}
+const mascots = [...document.querySelectorAll('.mascot')].map(el => new Mascot(el));
+setInterval(() => {
+  if (document.hidden) return;
+  mascots.forEach(m => { if (!m.el.getClientRects().length) return; m.step(.08); m.render(); });
+}, 80);
+function mascotTalk(){ mascots[0].talk(); }
 const video = $('video'), svg = $('overlay');
 const SVGNS = 'http://www.w3.org/2000/svg';
 
 /* ---------- Réglages persistants ---------- */
-const DEFAULTS = { sens:20, presence:20, stableMs:1000, motionTol:3.5, focusMs:1500, lockFocus:true, requireLid:true, sharpCheck:true, meters:true, sound:true, deviceId:'', calibMode:'aruco' };
+const DEFAULTS = { sens:20, presence:20, stableMs:1000, motionTol:3.5, focusMs:1500, lockFocus:true, requireLid:true, sharpCheck:true, meters:true, sound:true, deviceId:'', calibMode:'aruco', lang:'en' };
 const store = {
   get(k, d){ try{ const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; }catch(e){ return d; } },
   set(k, v){ try{ localStorage.setItem(k, JSON.stringify(v)); }catch(e){} }
@@ -479,6 +496,130 @@ const store = {
 const settings = Object.assign({}, DEFAULTS, store.get('petri.settings', {}));
 const calibKey = () => 'petri.calib' + (settings.deviceId ? '.' + settings.deviceId : '');
 let calib = store.get(calibKey(), store.get('petri.calib', null)); // {dish:{h}, lid:{h}, aspect, source}, un par objectif (voir « Socles : géométrie »)
+
+/* ---------- Langues : anglais (par défaut) et français ---------- */
+const plural = (n, one, many) => n + ' ' + (n > 1 ? many : one);
+const I18N = {
+  en: {
+    calibrate:'Calibrate', photos:'Photos', settings:'Settings', fullscreen:'Full screen', lens:'Lens',
+    dish:'Dish', lid:'Lid', motion:'Motion', sharpness:'Sharpness', cancel:'Cancel', confirm:'Confirm',
+    savedPhotos:'Saved photos', close:'Close', share:'Save to gallery', zip:'Download .zip', zipBusy:'Preparing…',
+    clearExported:'Delete exported photos', exportNote:'Photos stay in the app until you delete them.',
+    grpDetect:'Detection', sSens:'Difference threshold', sSensHelp:'Lower reacts to smaller changes from the empty base.',
+    sPresence:'Area needed to detect', sPresenceHelp:'Share of the Dish circle that must change. Check the Dish meter with a dish in place.',
+    sStable:'Wait after detection', sMotion:'Motion tolerance', sMotionHelp:'Higher accepts more motion (vibration, hands nearby). Compare with the Motion meter.',
+    sFocus:'Focus time', sFocusHelp:'The sharpest frame in this time is kept.',
+    grpChecks:'Checks', cLid:'Lid base: circle and lid detection', cSharp:'Reject blurry images',
+    cLock:'Lock focus after the first photo (faster)', cMeters:'Show meters', cSound:'Sounds',
+    tOk:'Test success sound', tErr:'Test error sound', grpCamera:'Camera', btnRef:'Retake empty background',
+    grpCalib:'Calibration', selCalib:'Calibration mode', optAruco:'Automatic: ArUco markers', optManual:'Manual: place circles',
+    selCalibHelp:'Used by Calibrate and at start. In automatic mode, manual stays available if markers are not found.',
+    calibNow:'Calibrate now',
+    startTitle:'Snap Petri dishes hands-free', startIntro:'Mount the device, back camera facing the base.',
+    step1:'Keep the base empty: the app finds the markers and places the circles.', step2:'Check the circles, then save.',
+    step3:'Place each dish: the photo is taken automatically.', start:'Start camera', rotate:'Turn the device to landscape.',
+    langSwitch:'Passer en français',
+    waiting:'Waiting', ready:'Ready', placeLid:'Place a dish and its lid.', place:'Place an open dish.',
+    detected:'Dish detected', newDish:'New dish', holdStill:'Hold still.', retrying:'Trying again',
+    focusing:'Focusing…', shooting:'Shooting…', saving:'Saving…', saved:'Photo saved',
+    savedSmall: p => plural(p.n, 'photo', 'photos') + '. Remove the dish.',
+    failMoved:'It moved', failMovedD:'The dish or a hand moved.', failLid:'No lid found', failLidD:'Put the lid in its circle.',
+    failBlur:'Blurry image', failBlurD: p => 'Sharpness ' + p.v + ', usually ' + p.m + '.',
+    failSave:'Save failed', failQuota:'Storage full: export, then delete photos.', failErr: p => 'Error: ' + p.e + '.',
+    retryAuto:'Retrying…', removeToRetry:'Remove the dish to retry.', photoNow:'Take photo now',
+    bgMeasure:'Measuring background…', keepEmpty:'Keep the base empty.', shapeChanged:'The image changed shape.',
+    findMarkers:'Finding markers…', noDetector:'Markers unavailable', noDetectorD:'The detector did not load (offline?).',
+    retry:'Retry', manualBtn:'Set by hand', saveBtn:'Save', calibFail:'Calibration failed',
+    calibFound:'Calibration found', checkCircles:'Check the circles.', placeCircles:'Place the circles',
+    baseDish:'Dish base', baseLid:'Lid base', dirs:['N', 'E', 'S', 'W'],
+    errMissing: p => p.base + ': missing ' + p.list + '.', errAligned: p => p.base + ': markers in a line.',
+    errMirror: p => p.base + ': markers swapped?', errSize: p => p.base + ': odd size.',
+    errRatio:'Bases differ in size: check the marker IDs.', need3:'Each base needs 3 markers.', noMarkers:'No markers found. Keep the base empty and well lit.',
+    partial: p => p.base + ': ' + p.n + '/4 markers.',
+    calibSaved:'Calibration saved.', refocus:'Blurry: refocusing.', lockFail:'Focus lock failed, autofocus kept.',
+    lockOk:'Focus locked.', bgUpdated:'Background updated.', lensT: p => 'Lens: ' + p.l, needCalib:' Calibration needed.',
+    shared: p => plural(p.n, 'photo', 'photos') + ' sent.', shareFail: p => 'Sharing failed: ' + p.e,
+    shareNA:'Gallery sharing is not available here. Use the .zip.', zipNA:'The .zip module did not load (offline?).',
+    zipReady: p => 'Archive ready: ' + p.f, exportFail: p => 'Export failed: ' + p.e, noFullscreen:'Full screen is not available here.',
+    errNoApi:'This browser cannot use the camera. Open the page over HTTPS in Safari or Chrome.',
+    errDenied:'Camera access denied. Allow it in the browser settings, and open the page directly in Safari or Chrome.',
+    errNoCam:'No camera found.', errBusy:'Another app is using the camera. Close it and retry.',
+    errStart: p => 'Cannot start the camera (' + p.e + ').', camN: p => 'Camera ' + p.n, camInfo: p => 'Image: ' + p.w + ' × ' + p.h + ' px',
+    emptyGrid:'No photos yet. Place a dish on the base to start.', exported:'exported',
+    del: p => 'Delete ' + p.n + '?', delAria: p => 'Delete ' + p.n,
+    clearConfirm: p => 'Delete ' + plural(p.n, 'exported photo', 'exported photos') + ' from the app?', dec:'.'
+  },
+  fr: {
+    calibrate:'Calibrer', photos:'Photos', settings:'Réglages', fullscreen:'Plein écran', lens:'Objectif',
+    dish:'Boîte', lid:'Couvercle', motion:'Mouvement', sharpness:'Netteté', cancel:'Annuler', confirm:'Confirmer',
+    savedPhotos:'Photos enregistrées', close:'Fermer', share:'Enregistrer dans la galerie', zip:'Télécharger en .zip', zipBusy:'Préparation…',
+    clearExported:'Supprimer les photos exportées', exportNote:"Les photos restent dans l'app tant que vous ne les supprimez pas.",
+    grpDetect:'Détection', sSens:'Seuil de différence', sSensHelp:"Plus bas, l'app réagit à de plus petits changements par rapport au socle vide.",
+    sPresence:'Surface occupée pour détecter', sPresenceHelp:'Part du cercle Boîte qui doit changer. Regardez la mesure Boîte avec une boîte posée.',
+    sStable:'Attente après détection', sMotion:'Tolérance au mouvement', sMotionHelp:"Plus haut, l'app accepte plus de mouvement (vibrations, main proche). Comparez avec la mesure Mouvement.",
+    sFocus:'Durée de mise au point', sFocusHelp:"L'app garde l'image la plus nette sur cette durée.",
+    grpChecks:'Contrôles', cLid:'Socle du couvercle : cercle et détection du couvercle', cSharp:'Refuser les images floues',
+    cLock:'Verrouiller la mise au point après la première photo (plus rapide)', cMeters:'Afficher les mesures', cSound:'Sons',
+    tOk:'Tester le son de réussite', tErr:"Tester le son d'erreur", grpCamera:'Caméra', btnRef:'Reprendre le fond vide',
+    grpCalib:'Calibration', selCalib:'Mode de calibration', optAruco:'Automatique : marqueurs ArUco', optManual:'Manuel : cercles à placer',
+    selCalibHelp:'Utilisé par « Calibrer » et au démarrage. En automatique, le mode manuel reste proposé si les marqueurs ne sont pas trouvés.',
+    calibNow:'Calibrer maintenant',
+    startTitle:"Photographiez les boîtes sans toucher l'écran", startIntro:"Fixez l'appareil, caméra arrière vers le socle.",
+    step1:"Laissez le socle vide : l'app repère les marqueurs et place les cercles.", step2:'Vérifiez les cercles, puis enregistrez.',
+    step3:'Posez chaque boîte : la photo part toute seule.', start:'Démarrer la caméra', rotate:"Tournez l'appareil en paysage.",
+    langSwitch:'Switch to English',
+    waiting:'En attente', ready:'Prêt', placeLid:'Posez une boîte et son couvercle.', place:'Posez une boîte ouverte.',
+    detected:'Boîte détectée', newDish:'Nouvelle boîte', holdStill:'Ne bougez plus.', retrying:'Nouvel essai',
+    focusing:'Mise au point…', shooting:'Prise de vue…', saving:'Enregistrement…', saved:'Photo enregistrée',
+    savedSmall: p => plural(p.n, 'photo', 'photos') + '. Retirez la boîte.',
+    failMoved:'Ça a bougé', failMovedD:'La boîte ou une main a bougé.', failLid:'Couvercle absent', failLidD:'Posez le couvercle dans son cercle.',
+    failBlur:'Image floue', failBlurD: p => 'Netteté ' + p.v + ", d'habitude " + p.m + '.',
+    failSave:"Échec de l'enregistrement", failQuota:'Mémoire pleine : exportez, puis supprimez des photos.', failErr: p => 'Erreur : ' + p.e + '.',
+    retryAuto:'Nouvel essai…', removeToRetry:'Retirez la boîte pour réessayer.', photoNow:'Photo maintenant',
+    bgMeasure:'Mesure du fond vide…', keepEmpty:'Laissez le socle vide.', shapeChanged:"L'image a changé de forme.",
+    findMarkers:'Recherche des marqueurs…', noDetector:'Marqueurs indisponibles', noDetectorD:"Le détecteur n'a pas chargé (hors connexion ?).",
+    retry:'Réessayer', manualBtn:'Calibrer à la main', saveBtn:'Enregistrer', calibFail:'Calibration impossible',
+    calibFound:'Calibration trouvée', checkCircles:'Vérifiez les cercles.', placeCircles:'Placez les cercles',
+    baseDish:'Socle boîte', baseLid:'Socle couvercle', dirs:['N', 'E', 'S', 'O'],
+    errMissing: p => p.base + ' : manque ' + p.list + '.', errAligned: p => p.base + ' : marqueurs alignés.',
+    errMirror: p => p.base + ' : marqueurs inversés ?', errSize: p => p.base + ' : taille aberrante.',
+    errRatio:'Socles de tailles incohérentes : vérifiez les ID.', need3:'Il faut 3 marqueurs par socle.', noMarkers:'Aucun marqueur trouvé. Laissez le socle vide et bien éclairé.',
+    partial: p => p.base + ' : ' + p.n + '/4 marqueurs.',
+    calibSaved:'Calibration enregistrée.', refocus:'Floue : nouvelle mise au point.', lockFail:'Verrouillage raté, autofocus conservé.',
+    lockOk:'Mise au point verrouillée.', bgUpdated:'Fond vide mis à jour.', lensT: p => 'Objectif : ' + p.l, needCalib:' Calibration nécessaire.',
+    shared: p => plural(p.n, 'photo envoyée', 'photos envoyées') + '.', shareFail: p => 'Partage impossible : ' + p.e,
+    shareNA:"Le partage vers la galerie n'est pas disponible ici. Utilisez le .zip.", zipNA:"Le module .zip n'a pas chargé (connexion ?).",
+    zipReady: p => 'Archive prête : ' + p.f, exportFail: p => 'Export impossible : ' + p.e, noFullscreen:"Plein écran indisponible sur cet appareil.",
+    errNoApi:"Ce navigateur n'accède pas à la caméra. Ouvrez la page en HTTPS dans Safari ou Chrome.",
+    errDenied:"Accès à la caméra refusé. Autorisez-le dans les réglages du navigateur, et ouvrez la page directement dans Safari ou Chrome.",
+    errNoCam:'Aucune caméra trouvée.', errBusy:'Une autre app utilise la caméra. Fermez-la puis réessayez.',
+    errStart: p => 'Impossible de démarrer la caméra (' + p.e + ').', camN: p => 'Caméra ' + p.n, camInfo: p => 'Image : ' + p.w + ' × ' + p.h + ' px',
+    emptyGrid:"Aucune photo pour l'instant. Posez une boîte sur le socle pour commencer.", exported:'exportée',
+    del: p => 'Supprimer ' + p.n + ' ?', delAria: p => 'Supprimer ' + p.n,
+    clearConfirm: p => 'Supprimer ' + plural(p.n, 'photo exportée', 'photos exportées') + " de l'app ?", dec:','
+  }
+};
+let lang = I18N[settings.lang] ? settings.lang : 'en';
+function t(k, p){ const v = I18N[lang][k] !== undefined ? I18N[lang][k] : I18N.en[k]; return typeof v === 'function' ? v(p || {}) : v; }
+const T = (k, p) => () => t(k, p); // texte traduit au moment de l'affichage (suit les changements de langue)
+// drapeaux en pixel art (16 × 10)
+function flagSvg(code){
+  const px = [];
+  for (let y = 0; y < 10; y++) for (let x = 0; x < 16; x++){
+    let c;
+    if (code === 'fr') c = x < 5 ? '#1F3A93' : x < 11 ? '#FFFFFF' : '#D2452F';
+    else {
+      const dx = x - 7.5, dy = y - 4.5, d1 = Math.abs(dy - dx*10/16), d2 = Math.abs(dy + dx*10/16);
+      c = '#1F3A93';
+      if (d1 < 1.2 || d2 < 1.2) c = '#FFFFFF';
+      if (d1 < .5 || d2 < .5) c = '#D2452F';
+      if (Math.abs(dx) < 2 || Math.abs(dy) < 2) c = '#FFFFFF';
+      if (Math.abs(dx) < 1 || Math.abs(dy) < 1) c = '#D2452F';
+    }
+    px.push('<rect x="' + x + '" y="' + y + '" width="1" height="1" fill="' + c + '"/>');
+  }
+  return '<svg viewBox="0 0 16 10" aria-hidden="true">' + px.join('') + '</svg>';
+}
 
 /* ---------- État ---------- */
 let stream = null, track = null, W = 0, H = 0;
@@ -545,14 +686,18 @@ async function refreshCount(){ try{ $('countBadge').textContent = await photoCou
 
 /* ---------- Interface d'état ---------- */
 // tone : busy = le logiciel travaille (cadre en pointillés qui tournent) ; wait / idle = on attend l'utilisateur ; ok / err
+// les textes peuvent être des fonctions (T(...)) : ils sont recalculés si la langue change
+let lastStatus = null;
+const txt = x => typeof x === 'function' ? x() : (x || '');
 function setStatus(tone, big, small, actions){
-  const st = $('status');
-  if (big !== $('stBig').textContent || tone !== st.dataset.tone) mascotTalk();
-  st.dataset.tone = tone; $('frame').dataset.tone = tone; $('stBig').textContent = big; $('stSmall').textContent = small || '';
+  lastStatus = [tone, big, small, actions];
+  const st = $('status'), b = txt(big);
+  if (b !== $('stBig').textContent || tone !== st.dataset.tone) mascotTalk();
+  st.dataset.tone = tone; $('frame').dataset.tone = tone; $('stBig').textContent = b; $('stSmall').textContent = txt(small);
   const box = $('stActions'); box.innerHTML = '';
   (actions || []).forEach(a => {
     const b = document.createElement('button');
-    b.type = 'button'; b.className = 'btn' + (a.primary ? ' primary' : ''); b.textContent = a.label;
+    b.type = 'button'; b.className = 'btn' + (a.primary ? ' primary' : ''); b.textContent = txt(a.label);
     b.addEventListener('click', a.fn); box.appendChild(b);
   });
 }
@@ -564,13 +709,13 @@ function toast(msg){
   const t = $('toast'); t.textContent = msg; t.classList.add('show');
   clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove('show'), 3500);
 }
-const runActions = () => [{ label:'Prendre la photo maintenant', fn: manualCapture }];
+const runActions = () => [{ label:T('photoNow'), fn: manualCapture }];
 
 /* ---------- Caméra ---------- */
 async function startCamera(){
   const err = $('startError'); err.classList.remove('show');
   if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
-    showStartError("Ce navigateur ne donne pas accès à la caméra. La page doit être ouverte en HTTPS, dans Safari ou Chrome.");
+    showStartError(t('errNoApi'));
     return;
   }
   try{
@@ -598,15 +743,15 @@ async function startCamera(){
     listCameras();
     requestWake();
     if (calib && Math.abs(calib.aspect - W/H) < 0.02) startRun(true);
-    else enterCalibration(calib ? "La forme de l'image a changé (rotation ou autre caméra)." : null);
+    else enterCalibration(calib ? 'shapeChanged' : null);
     if (!loopTimer) loop();
   }catch(e){
     const n = e && e.name;
     if (n === 'NotAllowedError' || n === 'SecurityError')
-      showStartError("L'accès à la caméra a été refusé ou est bloqué sur cette page. Autorisez la caméra dans les réglages du navigateur. Si la page est affichée dans une autre application, ouvrez-la directement dans Safari ou Chrome.");
-    else if (n === 'NotFoundError') showStartError("Aucune caméra trouvée sur cet appareil.");
-    else if (n === 'NotReadableError') showStartError("La caméra est déjà utilisée par une autre application. Fermez-la puis réessayez.");
-    else showStartError("Impossible de démarrer la caméra (" + (n || e) + ").");
+      showStartError(t('errDenied'));
+    else if (n === 'NotFoundError') showStartError(t('errNoCam'));
+    else if (n === 'NotReadableError') showStartError(t('errBusy'));
+    else showStartError(t('errStart', { e: n || e }));
   }
 }
 function showStartError(msg){ $('start').classList.remove('hidden'); const b = $('startError'); b.textContent = msg; b.classList.add('show'); }
@@ -622,10 +767,10 @@ async function listCameras(){
     const sel = $('camSelect'); sel.innerHTML = '';
     const cur = track && track.getSettings ? track.getSettings().deviceId : '';
     devs.forEach((d, i) => {
-      const o = document.createElement('option'); o.value = d.deviceId; o.textContent = d.label || ('Caméra ' + (i+1));
+      const o = document.createElement('option'); o.value = d.deviceId; o.textContent = d.label || t('camN', { n:i+1 });
       if (d.deviceId === cur) o.selected = true; sel.appendChild(o);
     });
-    $('camInfo').textContent = 'Image : ' + W + ' × ' + H + ' pixels';
+    $('camInfo').textContent = t('camInfo', { w:W, h:H });
   }catch(e){}
 }
 
@@ -644,7 +789,7 @@ video.addEventListener('resize', () => {
   const oldAspect = W && H ? W/H : 0;
   onVideoSize();
   if (mode === 'run' && calib && Math.abs(calib.aspect - W/H) > 0.02 && oldAspect)
-    enterCalibration("La forme de l'image a changé (rotation ?).");
+    enterCalibration('shapeChanged');
 });
 
 async function requestWake(){
@@ -659,9 +804,8 @@ document.addEventListener('visibilitychange', () => { if (document.visibilitySta
 const SOCLE_R = 51.5;            // rayon du socle (103 mm)
 const MARK_D = 35.75;            // distance centre du socle → centre d'un marqueur
 const MARK_POS = [[0, MARK_D], [MARK_D, 0], [0, -MARK_D], [-MARK_D, 0]]; // ID % 4 : nord, est, sud, ouest
-const MARK_NAME = ['nord', 'est', 'sud', 'ouest'];
 const SOCLE_IDS = { dish:[0, 1, 2, 3], lid:[4, 5, 6, 7] };
-const SOCLE_NAME = { dish:'Socle boîte', lid:'Socle couvercle' };
+const baseName = k => t(k === 'dish' ? 'baseDish' : 'baseLid');
 
 function project(h, X, Y){
   const w = h[6]*X + h[7]*Y + h[8];
@@ -738,7 +882,7 @@ function circlePx(c){ return { cx:c.x*W, cy:c.y*H, r:c.r*mn() }; }
 
 const lidOn = () => !!settings.requireLid;
 const circleKeys = () => lidOn() ? ['dish','lid'] : ['dish'];
-const placeMsg = () => (lidOn() ? 'Posez une boîte ouverte et son couvercle dans leurs cercles.' : 'Posez une boîte ouverte dans son cercle.') + (focusLocked ? ' Mise au point verrouillée.' : '');
+const placeMsg = () => t(lidOn() ? 'placeLid' : 'place');
 function buildMasks(){
   const d = [], l = [], o = [], lid = lidOn();
   const iD = invert3(calib.dish.h), iL = invert3(calib.lid.h);
@@ -756,16 +900,15 @@ function buildMasks(){
 /* ---------- Overlay SVG ---------- */
 function el(name, attrs){ const e = document.createElementNS(SVGNS, name); for (const k in attrs) e.setAttribute(k, attrs[k]); return e; }
 const COLOR = { dish:'var(--dish)', lid:'var(--lid)' };
-const LABEL = { dish:'Boîte', lid:'Couvercle' };
 function svgLabel(text, x, y, fill, fs){
-  const t = el('text', { x, y, 'text-anchor':'middle', 'font-size':fs, 'font-weight':700, fill, stroke:'#111', 'stroke-width':fs*0.14, 'paint-order':'stroke', 'font-family':'Pixelify Sans, monospace' });
+  const t = el('text', { x, y, 'text-anchor':'middle', 'font-size':fs, 'font-weight':700, fill, stroke:'#111', 'stroke-width':fs*0.14, 'paint-order':'stroke', 'font-family':'ByteBounce, Pixelify Sans, monospace' });
   t.textContent = text; return t;
 }
 function drawZone(k, h, stroke, dashed){
   const z = zonePx(h), fs = mn() * 0.045;
   svg.appendChild(el('polygon', { points:z.pts.map(p => p[0].toFixed(1) + ',' + p[1].toFixed(1)).join(' '), fill:'none', stroke,
     'stroke-width':3, 'stroke-dasharray': dashed ? '10 8' : 'none', 'vector-effect':'non-scaling-stroke', opacity:.95 }));
-  svg.appendChild(svgLabel(LABEL[k], z.cx, z.y0 - fs*0.4, stroke, fs));
+  svg.appendChild(svgLabel(t(k), z.cx, z.y0 - fs*0.4, stroke, fs));
 }
 function drawOverlay(){
   svg.innerHTML = '';
@@ -779,7 +922,7 @@ function drawOverlay(){
       const hx = c.cx + c.r, hy = c.cy;
       g.appendChild(el('circle', { cx:hx, cy:hy, r:mn()*0.05, fill:'transparent', 'data-role':'size', style:'cursor:ew-resize' }));
       g.appendChild(el('circle', { cx:hx, cy:hy, r:mn()*0.022, fill:COLOR[k], stroke:'#111', 'stroke-width':2, 'vector-effect':'non-scaling-stroke', 'data-role':'size', style:'cursor:ew-resize' }));
-      g.appendChild(svgLabel(LABEL[k], c.cx, c.cy - c.r - fs*0.4, COLOR[k], fs));
+      g.appendChild(svgLabel(t(k), c.cx, c.cy - c.r - fs*0.4, COLOR[k], fs));
       svg.appendChild(g);
     });
     return;
@@ -852,18 +995,18 @@ const median = a => { const s = a.slice().sort((x, y) => x - y), n = s.length; r
 // calcule la transformation d'un socle à partir des marqueurs trouvés
 function fitSocle(k, found){
   const ids = SOCLE_IDS[k], have = ids.filter(id => found[id]), missing = ids.filter(id => !found[id]);
-  const names = list => list.map(id => id + ' (' + MARK_NAME[id % 4] + ')').join(', ');
-  if (have.length < 3) return { k, missing, few:true, error: SOCLE_NAME[k] + ' : ' + (have.length ? 'manquent ' : 'aucun marqueur, manquent ') + names(missing) + '.' };
+  const names = list => list.map(id => id + ' (' + t('dirs')[id % 4] + ')').join(', ');
+  if (have.length < 3) return { k, missing, few:true, error: () => t('errMissing', { base:baseName(k), list:names(missing) }) };
   const h = fitTransform(have.map(id => ({ X:MARK_POS[id % 4][0], Y:MARK_POS[id % 4][1], x:found[id].x, y:found[id].y })));
-  if (!h) return { k, missing, error: SOCLE_NAME[k] + ' : marqueurs alignés, calcul impossible.' };
+  if (!h) return { k, missing, error: () => t('errAligned', { base:baseName(k) }) };
   // contrôle : pas d'image inversée ni repliée sur toute la surface du socle
   for (let i = 0; i <= 16; i++){
-    const t = i / 16 * 2 * Math.PI, r = i === 16 ? 0 : SOCLE_R;
-    if (!(localDet(h, r*Math.cos(t), r*Math.sin(t)) < 0))
-      return { k, missing, error: SOCLE_NAME[k] + ' : disposition incohérente (marqueurs inversés ou mal identifiés ?).' };
+    const th = i / 16 * 2 * Math.PI, r = i === 16 ? 0 : SOCLE_R;
+    if (!(localDet(h, r*Math.cos(th), r*Math.sin(th)) < 0))
+      return { k, missing, error: () => t('errMirror', { base:baseName(k) }) };
   }
   const area = Math.abs(localDet(h, 0, 0)) * Math.PI * SOCLE_R * SOCLE_R / (W*H);
-  if (area < .005 || area > .9) return { k, missing, error: SOCLE_NAME[k] + ' : taille aberrante dans l\'image.' };
+  if (area < .005 || area > .9) return { k, missing, error: () => t('errSize', { base:baseName(k) }) };
   return { k, h, have, missing, kind: have.length >= 4 ? 'homographie' : 'affine', scale: Math.sqrt(Math.abs(localDet(h, 0, 0))) };
 }
 async function enterAuto(reason){
@@ -871,11 +1014,11 @@ async function enterAuto(reason){
   leaveManual(); unlockFocus();
   mode = 'auto'; state = 'idle'; ref = null; auto = null; drawOverlay();
   if (!getDetector()){
-    setStatus('err', 'Détection des marqueurs indisponible', "Le module ArUco n'a pas pu se charger (connexion ?). Utilisez la calibration manuelle.",
-      [{ label:'Réessayer', fn: () => enterAuto() }, { label:'Calibrer à la main', primary:true, fn: () => enterCalib() }]);
+    setStatus('err', T('noDetector'), T('noDetectorD'),
+      [{ label:T('retry'), fn: () => enterAuto() }, { label:T('manualBtn'), primary:true, fn: () => enterCalib() }]);
     return;
   }
-  setStatus('busy', 'Recherche des marqueurs…', (reason ? reason + ' ' : '') + 'Laissez le socle vide.', [{ label:'Calibrer à la main', fn: () => enterCalib() }]);
+  setStatus('busy', T('findMarkers'), () => (reason ? t(reason) + ' ' : '') + t('keepEmpty'), [{ label:T('manualBtn'), fn: () => enterCalib() }]);
   // plusieurs images : un marqueur doit être vu au moins 2 fois, on garde la médiane de ses centres
   const seen = {}, need = ids => ids.every(id => seen[id] && seen[id].length >= 3);
   let frames = 0;
@@ -893,23 +1036,23 @@ async function enterAuto(reason){
   const fits = circleKeys().map(k => fitSocle(k, found));
   if (fits.length === 2 && !fits[0].error && !fits[1].error){
     const ratio = fits[0].scale / fits[1].scale;
-    if (ratio < .6 || ratio > 1.65) fits[1].error = 'Les deux socles ont des tailles très différentes dans l\'image : vérifiez les ID des marqueurs.';
+    if (ratio < .6 || ratio > 1.65) fits[1].error = T('errRatio');
   }
   auto = { found, fits };
   const errors = fits.filter(f => f.error);
   if (errors.length){
     drawOverlay();
-    setStatus('err', 'Calibration impossible', errors.map(f => f.error).join(' ') + (errors.some(f => f.few) ? ' Il faut au moins 3 marqueurs visibles par socle.' : ''),
-      [{ label:'Réessayer', primary:true, fn: () => enterAuto() }, { label:'Calibrer à la main', fn: () => enterCalib() }]);
+    setStatus('err', T('calibFail'), () => !Object.keys(found).length ? t('noMarkers') : errors.map(f => f.error()).join(' ') + (errors.some(f => f.few) ? ' ' + t('need3') : ''),
+      [{ label:T('retry'), primary:true, fn: () => enterAuto() }, { label:T('manualBtn'), fn: () => enterCalib() }]);
     return;
   }
   const prevLid = calib && calib.lid && calib.lid.h ? calib.lid : { h:circleToH(defaultCircles().lid) };
   auto.pending = { dish:{ h:fits[0].h }, lid: lidOn() ? { h:fits[1].h } : prevLid, aspect:W/H, source:'aruco' };
   drawOverlay();
-  const detail = fits.map(f => SOCLE_NAME[f.k] + ' : ' + f.have.length + ' marqueurs' + (f.missing.length ? ' (manque ' + f.missing.map(id => id + ' ' + MARK_NAME[id % 4]).join(', ') + ', calcul affine)' : '')).join(' · ');
-  setStatus('wait', 'Calibration trouvée', detail + '. Les cercles suivent-ils bien les socles ? Le socle doit rester vide.',
-    [{ label:'Enregistrer', primary:true, fn: () => { if (!auto || !auto.pending) return; calib = auto.pending; auto = null; startRun(false); } },
-     { label:'Réessayer', fn: () => enterAuto() }, { label:'Calibrer à la main', fn: () => enterCalib() }]);
+  const detail = () => [t('checkCircles')].concat(fits.filter(f => f.missing.length).map(f => t('partial', { base:baseName(f.k), n:f.have.length }))).join(' ');
+  setStatus('wait', T('calibFound'), detail,
+    [{ label:T('saveBtn'), primary:true, fn: () => { if (!auto || !auto.pending) return; calib = auto.pending; auto = null; startRun(false); } },
+     { label:T('retry'), fn: () => enterAuto() }, { label:T('manualBtn'), fn: () => enterCalib() }]);
 }
 // affichage du résultat : marqueurs trouvés (carrés pleins), manquants estimés (pointillés), zones projetées
 function drawAuto(){
@@ -944,7 +1087,7 @@ function enterCalib(reason){
   mode = 'calib'; state = 'idle'; ref = null;
   manual = base && Math.abs(base.aspect - W/H) <= 0.02 ? { dish:circleFromH(base.dish.h), lid:circleFromH(base.lid.h) } : defaultCircles();
   document.body.classList.add('manual'); $('btnManCancel').disabled = !manualBack;
-  setStatus('idle', lidOn() ? 'Placez les deux cercles' : 'Placez le cercle de la boîte', (reason ? reason + ' ' : '') + 'Laissez le socle vide, puis confirmez.');
+  setStatus('idle', T('placeCircles'), () => (reason ? t(reason) + ' ' : '') + t('keepEmpty'));
   drawOverlay();
 }
 function leaveManual(){ document.body.classList.remove('manual'); }
@@ -956,12 +1099,12 @@ async function startRun(silent){
   buildMasks(); mode = 'run';
   await takeReference();
   state = 'empty'; lastMsg = null; drawOverlay();
-  setStatus('wait', 'Prêt', placeMsg(), runActions());
-  if (!silent) toast('Calibration et fond vide enregistrés.');
+  setStatus('wait', T('ready'), placeMsg, runActions());
+  if (!silent) toast(t('calibSaved'));
 }
 async function takeReference(){
   refPending = true;
-  setStatus('busy', 'Mesure du fond vide…', 'Ne posez rien sur le socle.');
+  setStatus('busy', T('bgMeasure'), T('keepEmpty'));
   const n = aw*ah, acc = new Float32Array(n*3); const frames = 5;
   for (let f = 0; f < frames; f++){
     actx.drawImage(video, 0, 0, aw, ah);
@@ -1064,7 +1207,7 @@ function loop(){
   switch (state){
     case 'empty':
       if (a.fDish > P){ state = 'settling'; tSince = now; sounds.tick(); drawOverlay();
-        setStatus('busy', 'Boîte détectée', 'Ne bougez plus…', runActions()); }
+        setStatus('busy', T('detected'), T('holdStill'), runActions()); }
       else if (a.fDish < P*.3 && a.motion < 1.2){
         // adaptation lente aux variations de lumière
         for (let i = 0, n = aw*ah; i < n; i++){ ref[i*3] += (a.d[i*4]-ref[i*3])*.02; ref[i*3+1] += (a.d[i*4+1]-ref[i*3+1])*.02; ref[i*3+2] += (a.d[i*4+2]-ref[i*3+2])*.02; }
@@ -1084,15 +1227,15 @@ function loop(){
       }
       if (now - tFocus >= focusDur){
         if (bestSharp < 0){ // aucune image immobile : on attend encore un peu
-          if (now - tFocus >= focusDur + 1500) fail('Mouvement pendant la prise de vue', 'La boîte ou une main a bougé.');
+          if (now - tFocus >= focusDur + 1500) fail(T('failMoved'), T('failMovedD'));
           break;
         }
         // double contrôle : avec la mise au point verrouillée, l'image doit rester aussi nette qu'à la première photo
         // (la netteté dépend du contenu de chaque boîte : on ne refait la mise au point que pour une image vraiment floue)
-        if (focusLocked){ const m = medianSharp(); if (m > 0 && bestSharp < m*.45){ unlockFocus(); toast('Image floue : nouvelle mise au point.'); beginFocus(now); break; } }
-        if (settings.requireLid && a.fLid < P*.5){ fail('Couvercle non détecté', "Placez le couvercle dans son cercle, numéro visible."); break; }
+        if (focusLocked){ const m = medianSharp(); if (m > 0 && bestSharp < m*.45){ unlockFocus(); toast(t('refocus')); beginFocus(now); break; } }
+        if (settings.requireLid && a.fLid < P*.5){ fail(T('failLid'), T('failLidD')); break; }
         const med = medianSharp();
-        if (!focusLocked && settings.sharpCheck && med > 0 && bestSharp < med*.45){ fail('Image floue', 'Netteté ' + Math.round(bestSharp) + ' pour ' + Math.round(med) + ' habituellement.'); break; }
+        if (!focusLocked && settings.sharpCheck && med > 0 && bestSharp < med*.45){ fail(T('failBlur'), T('failBlurD', { v:Math.round(bestSharp), m:Math.round(med) })); break; }
         save();
       }
       break; }
@@ -1100,7 +1243,7 @@ function loop(){
       if (a.fDish < P*.5){ if (!tEmptySince) tEmptySince = now; if (now - tEmptySince > 600){ failStreak = 0; toEmpty(); } break; }
       tEmptySince = 0;
       if (now - tRetry >= 900){ state = 'settling'; tSince = now; drawOverlay();
-        setStatus('busy', 'Nouvel essai…', 'Ne bougez plus…', runActions()); }
+        setStatus('busy', T('retrying'), T('holdStill'), runActions()); }
       break;
     case 'wait_removal': {
       // vérifie sur la même boîte, et sur plusieurs images, que le verrouillage n'a pas dégradé la netteté
@@ -1108,8 +1251,8 @@ function loop(){
         verifyMax = Math.max(verifyMax, sharpness());
         if (++verifyN >= 5){
           lockVerify = false;
-          if (verifyMax < lockSharp*.5){ unlockFocus(); toast('Le verrouillage de la mise au point a échoué, autofocus conservé.'); }
-          else toast('Mise au point verrouillée pour les prochaines boîtes.');
+          if (verifyMax < lockSharp*.5){ unlockFocus(); toast(t('lockFail')); }
+          else toast(t('lockOk'));
         }
       }
       if (a.fDish < P*.5){ if (!tEmptySince) tEmptySince = now; if (now - tEmptySince > 600){ snap = null; toEmpty(); } break; }
@@ -1119,7 +1262,7 @@ function loop(){
       if (changedFrac(a.d, snap) > P && a.motion < MOTION_T){
         if (!tSwap) tSwap = now;
         if (now - tSwap > 400){ snap = null; state = 'settling'; tSince = now; sounds.tick(); drawOverlay();
-          setStatus('busy', 'Nouvelle boîte détectée', 'Ne bougez plus…', runActions()); }
+          setStatus('busy', T('newDish'), T('holdStill'), runActions()); }
       } else tSwap = 0;
       break; }
   }
@@ -1129,13 +1272,13 @@ function toEmpty(){
   // premier socle vide après le verrouillage : on reprend le fond avec la nouvelle mise au point
   if (refreshRef){ refreshRef = false; takeReference().then(toEmpty); return; }
   state = 'empty'; tEmptySince = 0; drawOverlay();
-  setStatus('wait', 'Prêt', placeMsg(), runActions());
+  setStatus('wait', T('ready'), placeMsg, runActions());
 }
 const QUICK_MS = 500;
 async function beginFocus(now){
   state = 'focusing'; tFocus = now; bestSharp = -1; drawOverlay();
   focusDur = focusLocked ? QUICK_MS : settings.focusMs;
-  setStatus('busy', focusLocked ? 'Prise de vue…' : 'Mise au point…', 'Ne bougez plus.', []);
+  setStatus('busy', T(focusLocked ? 'shooting' : 'focusing'), T('holdStill'), []);
   if (focusLocked) return;
   try{
     const caps = track.getCapabilities ? track.getCapabilities() : {};
@@ -1181,12 +1324,12 @@ function fail(title, detail, final){
   state = final ? 'wait_removal' : 'retry'; tRetry = performance.now(); tEmptySince = 0; snap = null; lastMsg = { ok:false }; afterShot(false);
   if (!failStreak++ || final) sounds.err(); // un seul son d'erreur par série d'essais
   flash('#D9433D'); drawOverlay();
-  setStatus('err', 'Échec : ' + title, detail + (final ? ' Retirez la boîte et reposez-la pour réessayer.' : ' Nouvel essai…'), runActions());
+  setStatus('err', title, () => txt(detail) + ' ' + t(final ? 'removeToRetry' : 'retryAuto'), runActions());
 }
 function pad(n){ return String(n).padStart(2, '0'); }
 async function save(){
   state = 'saving';
-  setStatus('busy', 'Enregistrement…', '', []);
+  setStatus('busy', T('saving'), '', []);
   try{
     if (bestCv.width < 10) throw new Error('image vide');
     const blob = await new Promise((res, rej) => bestCv.toBlob(b => b ? res(b) : rej(new Error('encodage impossible')), 'image/jpeg', .93));
@@ -1199,10 +1342,10 @@ async function save(){
     const total = await photoCount(); $('countBadge').textContent = total;
     state = 'wait_removal'; tEmptySince = 0; snap = null; lastMsg = { ok:true }; failStreak = 0; afterShot(true);
     sounds.ok(); flash('#1E9E5E'); drawOverlay();
-    setStatus('ok', 'Photo enregistrée', name.replace('.jpg', '') + ', ' + total + ' photo' + (total > 1 ? 's' : '') + ' au total. Retirez la boîte.', runActions());
+    setStatus('ok', T('saved'), T('savedSmall', { n:total }), runActions());
   }catch(e){
     const quota = e && (e.name === 'QuotaExceededError');
-    fail('Enregistrement impossible', quota ? "La mémoire de l'app est pleine : exportez puis supprimez des photos." : 'Erreur : ' + (e && e.message || e) + '.', true);
+    fail(T('failSave'), quota ? T('failQuota') : T('failErr', { e: e && e.message || e }), true);
   }
 }
 
@@ -1219,7 +1362,7 @@ async function renderGrid(){
   const g = $('grid'); g.innerHTML = '';
   let all = [];
   try{ all = (await photoAll()).sort((a, b) => b.id - a.id); }catch(e){}
-  if (!all.length){ g.innerHTML = '<p class="empty">Aucune photo pour l\'instant. Posez une boîte sur le socle pour commencer.</p>'; }
+  if (!all.length){ const p = document.createElement('p'); p.className = 'empty'; p.textContent = t('emptyGrid'); g.appendChild(p); }
   all.forEach(r => {
     const u = URL.createObjectURL(r.blob); thumbUrls.push(u);
     const d = document.createElement('div'); d.className = 'thumb';
@@ -1227,9 +1370,9 @@ async function renderGrid(){
     const m = document.createElement('div'); m.className = 'meta';
     const s = document.createElement('span'); s.textContent = r.name.replace('.jpg', '').replace('_', ' ');
     m.appendChild(s);
-    if (r.exported){ const t = document.createElement('span'); t.className = 'tag'; t.textContent = 'exportée'; m.appendChild(t); }
-    const del = document.createElement('button'); del.type = 'button'; del.textContent = '✕'; del.setAttribute('aria-label', 'Supprimer ' + r.name);
-    del.addEventListener('click', async () => { if (confirm('Supprimer ' + r.name + ' ?')){ await photoDel(r.id); renderGrid(); refreshCount(); } });
+    if (r.exported){ const tag = document.createElement('span'); tag.className = 'tag'; tag.textContent = t('exported'); m.appendChild(tag); }
+    const del = document.createElement('button'); del.type = 'button'; del.textContent = '✕'; del.setAttribute('aria-label', t('delAria', { n:r.name }));
+    del.addEventListener('click', async () => { if (confirm(t('del', { n:r.name }))){ await photoDel(r.id); renderGrid(); refreshCount(); } });
     m.appendChild(del);
     d.append(img, m); g.appendChild(d);
   });
@@ -1247,27 +1390,27 @@ $('btnShare').addEventListener('click', async () => {
     try{
       await navigator.share({ files });
       await markExported(all.map(r => r.id)); renderGrid();
-      toast(all.length + ' photo' + (all.length > 1 ? 's' : '') + ' envoyée' + (all.length > 1 ? 's' : '') + '.');
-    }catch(e){ if (e.name !== 'AbortError') toast('Partage impossible : ' + e.message); }
+      toast(t('shared', { n:all.length }));
+    }catch(e){ if (e.name !== 'AbortError') toast(t('shareFail', { e:e.message })); }
   } else {
-    toast("Le partage vers la galerie n'est pas disponible ici. Utilisez le .zip.");
+    toast(t('shareNA'));
   }
 });
 $('btnZip').addEventListener('click', async () => {
   const all = await photoAll(); if (!all.length) return;
-  if (!window.JSZip){ toast("Le module .zip n'a pas pu se charger (connexion ?)."); return; }
-  const btn = $('btnZip'); btn.disabled = true; btn.textContent = 'Préparation…';
+  if (!window.JSZip){ toast(t('zipNA')); return; }
+  const btn = $('btnZip'); btn.disabled = true; btn.textContent = t('zipBusy');
   try{
     const zip = new JSZip();
     all.forEach(r => zip.file(r.name, r.blob, { binary:true }));
     const blob = await zip.generateAsync({ type:'blob', compression:'STORE' });
-    const dt = new Date(), fname = 'boites-petri_' + dt.getFullYear() + '-' + pad(dt.getMonth()+1) + '-' + pad(dt.getDate()) + '_' + pad(dt.getHours()) + 'h' + pad(dt.getMinutes()) + '.zip';
+    const dt = new Date(), fname = 'petri_' + dt.getFullYear() + '-' + pad(dt.getMonth()+1) + '-' + pad(dt.getDate()) + '_' + pad(dt.getHours()) + 'h' + pad(dt.getMinutes()) + '.zip';
     let done = false;
     if (window.claude && typeof window.claude.use === 'function'){
       const dl = await window.claude.use('downloads');
       if (dl){
         try{ await dl.save({ filename:fname, data:blob }); done = true; }
-        catch(e){ if (e && e.code === 'declined'){ btn.textContent = 'Télécharger en .zip'; btn.disabled = false; return; } }
+        catch(e){ if (e && e.code === 'declined'){ btn.textContent = t('zip'); btn.disabled = false; return; } }
       }
     }
     if (!done){
@@ -1275,29 +1418,30 @@ $('btnZip').addEventListener('click', async () => {
       a.href = u; a.download = fname; document.body.appendChild(a); a.click(); a.remove();
       setTimeout(() => URL.revokeObjectURL(u), 30000); done = true;
     }
-    await markExported(all.map(r => r.id)); renderGrid(); toast('Archive prête : ' + fname);
-  }catch(e){ toast('Export impossible : ' + (e.message || e)); }
-  btn.textContent = 'Télécharger en .zip'; btn.disabled = false;
+    await markExported(all.map(r => r.id)); renderGrid(); toast(t('zipReady', { f:fname }));
+  }catch(e){ toast(t('exportFail', { e:e.message || e })); }
+  btn.textContent = t('zip'); btn.disabled = false;
 });
 $('btnClearExported').addEventListener('click', async () => {
   const ex = (await photoAll()).filter(r => r.exported);
   if (!ex.length) return;
-  if (!confirm('Supprimer ' + ex.length + ' photo' + (ex.length > 1 ? 's' : '') + ' déjà exportée' + (ex.length > 1 ? 's' : '') + ' de l\'app ?')) return;
+  if (!confirm(t('clearConfirm', { n:ex.length }))) return;
   for (const r of ex) await photoDel(r.id);
   renderGrid(); refreshCount();
 });
 
 /* ---------- Réglages ---------- */
+const rangeLabels = []; // réaffichées au changement de langue (séparateur décimal)
 function bindRange(id, key, fmt){
   const i = $(id), v = $(id.replace('s', 'v'));
-  i.value = settings[key]; v.textContent = fmt(settings[key]);
+  i.value = settings[key]; v.textContent = fmt(settings[key]); rangeLabels.push(() => { v.textContent = fmt(settings[key]); });
   i.addEventListener('input', () => { settings[key] = +i.value; v.textContent = fmt(+i.value); store.set('petri.settings', settings); });
 }
 bindRange('sSens', 'sens', x => x);
 bindRange('sPresence', 'presence', x => x + ' %');
-bindRange('sStable', 'stableMs', x => (x/1000).toFixed(1).replace('.', ',') + ' s');
-bindRange('sMotion', 'motionTol', x => String(x).replace('.', ','));
-bindRange('sFocus', 'focusMs', x => (x/1000).toFixed(1).replace('.', ',') + ' s');
+bindRange('sStable', 'stableMs', x => (x/1000).toFixed(1).replace('.', t('dec')) + ' s');
+bindRange('sMotion', 'motionTol', x => String(x).replace('.', t('dec')));
+bindRange('sFocus', 'focusMs', x => (x/1000).toFixed(1).replace('.', t('dec')) + ' s');
 function bindCheck(id, key, after){
   const c = $(id); c.checked = !!settings[key];
   c.addEventListener('change', () => { settings[key] = c.checked; store.set('petri.settings', settings); after && after(); });
@@ -1306,7 +1450,7 @@ bindCheck('cLid', 'requireLid', () => {
   if (calib && W){ buildMasks(); drawOverlay(); }
   if (mode === 'calib') drawOverlay();
   else if (mode === 'auto') enterAuto();
-  else if (mode === 'run' && state === 'empty') setStatus('wait', 'Prêt', placeMsg(), runActions());
+  else if (mode === 'run' && state === 'empty') setStatus('wait', T('ready'), placeMsg, runActions());
 }); bindCheck('cSharp', 'sharpCheck'); bindCheck('cLock', 'lockFocus', () => { if (!settings.lockFocus) unlockFocus(); }); bindCheck('cSound', 'sound');
 bindCheck('cMeters', 'meters', () => $('meters').classList.toggle('hidden', !settings.meters));
 $('meters').classList.toggle('hidden', !settings.meters);
@@ -1315,7 +1459,7 @@ $('tErr').addEventListener('click', () => { initAudio(); const s = settings.soun
 function useCamera(id, label){
   settings.deviceId = id; store.set('petri.settings', settings);
   calib = store.get(calibKey(), null);
-  if (label) toast('Objectif : ' + label + (calib ? '' : '. Calibration nécessaire pour cet objectif.'));
+  if (label) toast(t('lensT', { l:label }) + (calib ? '' : t('needCalib')));
   startCamera();
 }
 $('camSelect').addEventListener('change', e => useCamera(e.target.value));
@@ -1323,9 +1467,9 @@ $('btnLens').addEventListener('click', () => {
   if (lenses.length < 2) return;
   const cur = track && track.getSettings ? track.getSettings().deviceId : settings.deviceId;
   const i = lenses.findIndex(d => d.deviceId === cur), next = lenses[(i + 1) % lenses.length];
-  useCamera(next.deviceId, next.label || ('Caméra ' + ((i + 1) % lenses.length + 1)));
+  useCamera(next.deviceId, next.label || t('camN', { n:(i + 1) % lenses.length + 1 }));
 });
-$('btnRef').addEventListener('click', async () => { if (mode !== 'run') return; closeSheets(); await takeReference(); toEmpty(); toast('Fond vide mis à jour.'); });
+$('btnRef').addEventListener('click', async () => { if (mode !== 'run') return; closeSheets(); await takeReference(); toEmpty(); toast(t('bgUpdated')); });
 $('btnCalib2').addEventListener('click', () => { closeSheets(); if (stream) enterCalibration(); });
 const selCalib = $('selCalib'); selCalib.value = settings.calibMode;
 selCalib.addEventListener('change', () => { settings.calibMode = selCalib.value; store.set('petri.settings', settings); });
@@ -1341,7 +1485,7 @@ $('btnFull').addEventListener('click', () => {
   if (d.fullscreenElement || d.webkitFullscreenElement) (d.exitFullscreen || d.webkitExitFullscreen).call(d);
   else {
     const f = e.requestFullscreen || e.webkitRequestFullscreen;
-    if (!f){ toast("Le plein écran n'est pas disponible sur cet appareil."); return; }
+    if (!f){ toast(t('noFullscreen')); return; }
     Promise.resolve(f.call(e)).then(() => { try{ return screen.orientation.lock('landscape'); }catch(err){} }).catch(() => {});
   }
 });
@@ -1352,6 +1496,22 @@ document.addEventListener('keydown', e => {
   }
 });
 document.addEventListener('pointerdown', initAudio, { once:true });
+
+/* ---------- Langue ---------- */
+function applyLang(){
+  document.documentElement.lang = lang;
+  document.querySelectorAll('[data-i18n]').forEach(e => { e.textContent = t(e.dataset.i18n); });
+  document.querySelectorAll('[data-i18n-aria]').forEach(e => e.setAttribute('aria-label', t(e.dataset.i18nAria)));
+  const other = lang === 'en' ? 'fr' : 'en', b = $('btnLang');
+  b.innerHTML = flagSvg(lang); b.setAttribute('aria-label', t('langSwitch')); b.title = t('langSwitch');
+  rangeLabels.forEach(f => f());
+  if (lastStatus) setStatus(...lastStatus); else setStatus('idle', T('waiting'), '');
+  if (W) drawOverlay();
+  if ($('sheetPhotos').classList.contains('open')) renderGrid();
+  if ($('sheetSettings').classList.contains('open')) listCameras();
+}
+$('btnLang').addEventListener('click', () => { lang = lang === 'en' ? 'fr' : 'en'; settings.lang = lang; store.set('petri.settings', settings); applyLang(); });
+applyLang();
 refreshCount();
 // installation comme application (Chrome : « Installer l'application ») et fonctionnement hors connexion
 if ('serviceWorker' in navigator && location.protocol !== 'file:') navigator.serviceWorker.register('sw.js').catch(() => {});
