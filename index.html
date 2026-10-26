@@ -335,6 +335,11 @@ body.manual .meters,body.manual .btn.lens{display:none}
 
     <div class="group-title" data-gicon="camera"><span data-i18n="grpCamera"></span></div>
     <div class="field"><select id="camSelect" data-i18n-aria="grpCamera"></select><p id="camInfo"></p></div>
+    <div class="field">
+      <label for="selRes" data-i18n="resLabel"></label>
+      <select id="selRes"></select>
+      <p data-i18n="resHelp"></p>
+    </div>
     <div class="row"><button class="btn" id="btnRef" type="button" data-i18n="btnRef"></button></div>
 
     <div class="group-title" data-gicon="calib"><span data-i18n="grpCalib"></span></div>
@@ -381,7 +386,7 @@ body.manual .meters,body.manual .btn.lens{display:none}
 (() => {
 'use strict';
 const $ = id => document.getElementById(id);
-const APP_VERSION = 'v22 · 26/10'; // à incrémenter à chaque publication
+const APP_VERSION = 'v23 · 26/10'; // à incrémenter à chaque publication
 $('ver').textContent = APP_VERSION;
 
 /* ---------- Mascotte (dessin et animation dans mascot.js) ---------- */
@@ -391,7 +396,7 @@ const video = $('video'), svg = $('overlay');
 const SVGNS = 'http://www.w3.org/2000/svg';
 
 /* ---------- Réglages persistants ---------- */
-const DEFAULTS = { sens:20, presence:20, stableMs:1000, motionTol:3.5, focusMs:1500, lockFocus:true, requireLid:true, sharpCheck:true, meters:true, sound:true, deviceId:'', calibMode:'aruco', lang:'en' };
+const DEFAULTS = { sens:20, presence:20, stableMs:1000, motionTol:3.5, focusMs:1500, lockFocus:true, requireLid:true, sharpCheck:true, meters:true, sound:true, deviceId:'', calibMode:'aruco', lang:'en', resolution:'max' };
 const store = {
   get(k, d){ try{ const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; }catch(e){ return d; } },
   set(k, v){ try{ localStorage.setItem(k, JSON.stringify(v)); }catch(e){} }
@@ -446,6 +451,7 @@ const I18N = {
     zipReady: p => 'Archive ready: ' + p.f, exportFail: p => 'Export failed: ' + p.e, noFullscreen:'Full screen is not available here.',
     errNoApi:'This browser cannot use the camera. Open the page over HTTPS in Safari or Chrome.',
     errDenied:'Camera access denied. Allow it in the browser settings, and open the page directly in Safari or Chrome.',
+    resLabel:'Resolution', resMax: p => 'Maximum' + (p.w ? ' (' + p.w + ' × ' + p.h + ')' : ''), resHelp:'Maximum gives the sharpest photos. Lower it if the app is slow.',
     errNoCam:'No camera found.', errBusy:'Another app is using the camera. Close it and retry.',
     errStart: p => 'Cannot start the camera (' + p.e + ').', camN: p => 'Camera ' + p.n, camInfo: p => 'Image: ' + p.w + ' × ' + p.h + ' px',
     emptyGrid:'No photos yet. Place a dish on the base to start.', exported:'exported',
@@ -495,6 +501,7 @@ const I18N = {
     zipReady: p => 'Archive prête : ' + p.f, exportFail: p => 'Export impossible : ' + p.e, noFullscreen:"Plein écran indisponible sur cet appareil.",
     errNoApi:"Ce navigateur n'accède pas à la caméra. Ouvrez la page en HTTPS dans Safari ou Chrome.",
     errDenied:"Accès à la caméra refusé. Autorisez-le dans les réglages du navigateur, et ouvrez la page directement dans Safari ou Chrome.",
+    resLabel:'Résolution', resMax: p => 'Maximum' + (p.w ? ' (' + p.w + ' × ' + p.h + ')' : ''), resHelp:"Maximum donne les photos les plus nettes. Baissez-la si l'app rame.",
     errNoCam:'Aucune caméra trouvée.', errBusy:'Une autre app utilise la caméra. Fermez-la puis réessayez.',
     errStart: p => 'Impossible de démarrer la caméra (' + p.e + ').', camN: p => 'Caméra ' + p.n, camInfo: p => 'Image : ' + p.w + ' × ' + p.h + ' px',
     emptyGrid:"Aucune photo pour l'instant. Posez une boîte sur le socle pour commencer.", exported:'exportée',
@@ -637,7 +644,8 @@ async function startCamera(){
   try{
     if (stream) stream.getTracks().forEach(t => t.stop());
     focusLocked = false; lockVerify = false; refreshRef = false; // nouvelle caméra : nouvelle mise au point
-    const v = { width:{ ideal:3840 }, height:{ ideal:2160 } };
+    const res = settings.resolution && settings.resolution !== 'max' ? settings.resolution.split('x').map(Number) : null;
+    const v = res ? { width:{ ideal:res[0] }, height:{ ideal:res[1] } } : { width:{ ideal:3840 }, height:{ ideal:2160 } };
     if (settings.deviceId) v.deviceId = { exact: settings.deviceId }; else v.facingMode = { ideal:'environment' };
     try{ stream = demo ? PetriDemo.start() : await navigator.mediaDevices.getUserMedia({ video:v, audio:false }); }
     catch(e){
@@ -647,6 +655,13 @@ async function startCamera(){
       } else throw e;
     }
     track = stream.getVideoTracks()[0];
+    // par défaut : la plus haute résolution que l'objectif annonce
+    if (!res && !demo){
+      try{
+        const c = track.getCapabilities ? track.getCapabilities() : {};
+        if (c.width && c.height && c.width.max && c.height.max) await track.applyConstraints({ width:{ ideal:c.width.max }, height:{ ideal:c.height.max } });
+      }catch(e){}
+    }
     video.srcObject = stream;
     await video.play().catch(() => {});
     await new Promise(r => { if (video.videoWidth) r(); else video.onloadedmetadata = () => r(); });
@@ -687,8 +702,21 @@ async function listCameras(){
       if (d.deviceId === cur) o.selected = true; sel.appendChild(o);
     });
     $('camInfo').textContent = t('camInfo', { w:W, h:H });
+    listResolutions();
   }catch(e){}
 }
+// résolutions proposées : maximum de l'objectif, puis les formats courants qu'il accepte
+const RES_LIST = [[4032,3024],[3840,2160],[3264,2448],[2560,1440],[2048,1536],[1920,1080],[1600,1200],[1280,960],[1280,720],[640,480]];
+function listResolutions(){
+  const sel = $('selRes'); sel.innerHTML = '';
+  const c = track && track.getCapabilities ? track.getCapabilities() : {}, mw = c.width && c.width.max, mh = c.height && c.height.max;
+  const add = (value, label) => { const o = document.createElement('option'); o.value = value; o.textContent = label; sel.appendChild(o); };
+  add('max', t('resMax', { w:mw, h:mh }));
+  RES_LIST.filter(([w, h]) => !mw || (w <= mw && h <= mh)).forEach(([w, h]) => add(w + 'x' + h, w + ' × ' + h));
+  if (![...sel.options].some(o => o.value === settings.resolution)) settings.resolution = 'max';
+  sel.value = settings.resolution; sel.disabled = demo;
+}
+$('selRes').addEventListener('change', e => { settings.resolution = e.target.value; store.set('petri.settings', settings); if (stream) startCamera(); });
 
 function onVideoSize(){
   W = video.videoWidth; H = video.videoHeight;
