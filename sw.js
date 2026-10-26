@@ -18,7 +18,7 @@ self.addEventListener('fetch', e => {
     e.respondWith(fetch(req.mode === 'navigate' ? req.url : req, { cache:'no-cache' }).then(res => { // toujours revalidé : les mises à jour arrivent tout de suite
       if (res.ok){ const copy = res.clone(); caches.open(CACHE).then(c => c.put(req, copy)); }
       return res;
-    }).catch(() => caches.match(req).then(r => r || caches.match('./index.html'))));
+    }).catch(() => caches.match(req, { ignoreSearch:true }).then(r => r || caches.match('./index.html')))); // hors connexion : mascot.js?v31 retrouve mascot.js
     return;
   }
   e.respondWith(caches.match(req).then(hit => hit || fetch(req).then(res => {
