@@ -157,7 +157,15 @@ svg#overlay{position:absolute;inset:0;width:100%;height:100%;touch-action:none}
 .field label{display:flex;justify-content:space-between;gap:1rem;font-weight:700;margin-bottom:.25rem}
 .field label span{font-weight:400;color:var(--muted);font-variant-numeric:tabular-nums}
 .field p{margin:.2rem 0 0;color:var(--muted);font-size:.9rem}
-input[type=range]{width:100%;accent-color:var(--ink);min-height:36px}
+/* curseurs pixel : piste encadrée, partie remplie en noir (--p, mis à jour par le script), poignée carrée avec ombre */
+input[type=range]{--p:50%;-webkit-appearance:none;appearance:none;width:100%;height:36px;margin:0;background:transparent;cursor:pointer}
+input[type=range]::-webkit-slider-runnable-track{height:14px;border:var(--b) solid var(--ink);background:linear-gradient(90deg,var(--ink) 0 var(--p),var(--paper) var(--p))}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;width:20px;height:28px;margin-top:-10px;border:var(--b) solid var(--ink);border-radius:0;background:var(--paper);box-shadow:var(--b) var(--b) 0 var(--ink)}
+input[type=range]:active::-webkit-slider-thumb{background:var(--wait)}
+input[type=range]::-moz-range-track{height:8px;border:var(--b) solid var(--ink);background:var(--paper)}
+input[type=range]::-moz-range-progress{height:8px;background:var(--ink)}
+input[type=range]::-moz-range-thumb{width:14px;height:22px;border:var(--b) solid var(--ink);border-radius:0;background:var(--paper);box-shadow:var(--b) var(--b) 0 var(--ink)}
+input[type=range]:active::-moz-range-thumb{background:var(--wait)}
 .check{display:flex;align-items:center;gap:.6rem;margin-bottom:.8rem;min-height:36px}
 .check input{width:22px;height:22px;accent-color:var(--ink)}
 select{width:100%;min-height:44px;border:var(--b) solid var(--ink);border-radius:0;background:var(--bg);padding:0 .6rem}
@@ -373,7 +381,7 @@ body.manual .meters,body.manual .btn.lens{display:none}
 (() => {
 'use strict';
 const $ = id => document.getElementById(id);
-const APP_VERSION = 'v21 · 26/10'; // à incrémenter à chaque publication
+const APP_VERSION = 'v22 · 26/10'; // à incrémenter à chaque publication
 $('ver').textContent = APP_VERSION;
 
 /* ---------- Mascotte (dessin et animation dans mascot.js) ---------- */
@@ -1340,10 +1348,11 @@ $('btnClearExported').addEventListener('click', async () => {
 
 /* ---------- Réglages ---------- */
 const rangeLabels = []; // réaffichées au changement de langue (séparateur décimal)
+const fillRange = i => i.style.setProperty('--p', (i.value - i.min) / (i.max - i.min) * 100 + '%'); // partie remplie de la piste
 function bindRange(id, key, fmt){
   const i = $(id), v = $(id.replace('s', 'v'));
-  i.value = settings[key]; v.textContent = fmt(settings[key]); rangeLabels.push(() => { v.textContent = fmt(settings[key]); });
-  i.addEventListener('input', () => { settings[key] = +i.value; v.textContent = fmt(+i.value); store.set('petri.settings', settings); });
+  i.value = settings[key]; fillRange(i); v.textContent = fmt(settings[key]); rangeLabels.push(() => { v.textContent = fmt(settings[key]); });
+  i.addEventListener('input', () => { settings[key] = +i.value; fillRange(i); v.textContent = fmt(+i.value); store.set('petri.settings', settings); });
 }
 bindRange('sSens', 'sens', x => x);
 bindRange('sPresence', 'presence', x => x + ' %');
