@@ -1,7 +1,7 @@
 // Service worker : rend l'app installable et utilisable hors connexion.
 // La page est cherchée d'abord sur le réseau (mises à jour immédiates), sinon dans le cache ;
 // les bibliothèques et polices (adresses versionnées) sont servies depuis le cache.
-const CACHE = 'petri-capture-v5';
+const CACHE = 'petri-capture-v6';
 const SHELL = ['./', './index.html', './manifest.webmanifest', './icons/icon-192.png', './icons/icon-512.png', './fonts/ByteBounce.ttf', './mascot.js'];
 
 self.addEventListener('install', e => {
@@ -15,7 +15,7 @@ self.addEventListener('fetch', e => {
   if (req.method !== 'GET') return;
   const url = new URL(req.url);
   if (req.mode === 'navigate' || url.origin === location.origin){
-    e.respondWith(fetch(req).then(res => {
+    e.respondWith(fetch(req.mode === 'navigate' ? req.url : req, { cache:'no-cache' }).then(res => { // toujours revalidé : les mises à jour arrivent tout de suite
       if (res.ok){ const copy = res.clone(); caches.open(CACHE).then(c => c.put(req, copy)); }
       return res;
     }).catch(() => caches.match(req).then(r => r || caches.match('./index.html'))));
