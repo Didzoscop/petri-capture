@@ -416,7 +416,7 @@ body.manual .meters,body.manual .btn.lens{display:none}
     <div class="row"><button class="btn" id="mailCancel" type="button" data-i18n="cancel"></button><button class="btn primary" id="mailPrepare" type="button" data-i18n="mailPrepare"></button></div>
   </div>
   <div id="mailStep2" hidden>
-    <h2 data-i18n="mailTitle"></h2>
+    <h2 id="mailTitle2"></h2>
     <p id="mailInfo"></p>
     <p class="note" id="mailHow"></p>
     <div class="parts" id="mailParts"></div>
@@ -432,7 +432,7 @@ body.manual .meters,body.manual .btn.lens{display:none}
 (() => {
 'use strict';
 const $ = id => document.getElementById(id);
-const APP_VERSION = 'v24 · 26/10'; // à incrémenter à chaque publication
+const APP_VERSION = 'v25 · 26/10'; // à incrémenter à chaque publication
 $('ver').textContent = APP_VERSION;
 
 /* ---------- Mascotte (dessin et animation dans mascot.js) ---------- */
@@ -503,12 +503,12 @@ const I18N = {
     mailBtn:'Send by email', mailTitle:'Send by email', mailPrepare:'Prepare', mailCopy:'Copy address', mailNone:'No photos to send.',
     mailSession: p => 'Last session: ' + plural(p.n, 'photo', 'photos') + ' (' + p.from + ' – ' + p.to + ')', mailAll: p => 'All photos (' + p.n + ')',
     mailBadAddr:'Enter a valid email address.', mailBusy:'Preparing…',
-    mailInfo: p => plural(p.n, 'photo', 'photos') + ', ' + p.mb + ' MB' + (p.parts > 1 ? ', in ' + p.parts + ' emails (size limit).' : '.'),
+    mailInfo: p => plural(p.n, 'photo', 'photos') + ', ' + p.mb + ' MB' + (p.parts > 1 ? ', in ' + p.parts + ' parts.' : '.'),
     mailHowShare: p => 'Tap each part, choose your mail app (Outlook, Gmail, Mail…). The address ' + p.to + ' is copied: in the "To" field, long-press then Paste.',
     mailHowDownload: p => 'This device cannot attach files directly: the .zip files are downloaded and a new email to ' + p.to + ' opens. Attach them by hand.',
     mailPart: p => 'Send part ' + p.i + '/' + p.n + ' (' + p.mb + ' MB)', mailPartOne: p => 'Send (' + p.mb + ' MB)',
     mailSubject: p => 'Petri·Capture – ' + p.date + (p.parts > 1 ? ' (' + p.i + '/' + p.parts + ')' : ''),
-    mailBody: p => plural(p.n, 'photo', 'photos') + ' from Petri·Capture.', mailCopied:'Address copied.', mailShareFail: p => 'Sharing failed: ' + p.e,
+    mailBody: p => plural(p.n, 'photo', 'photos') + ' from Petri·Capture.', mailCopied:'Address copied.', zipRefused:'This device refuses .zip files: tap again to send the photos directly.', galleryHow:'Max 10 photos per share: tap each part and choose where to save.', mailShareFail: p => 'Sharing failed: ' + p.e,
     errNoCam:'No camera found.', errBusy:'Another app is using the camera. Close it and retry.',
     errStart: p => 'Cannot start the camera (' + p.e + ').', camN: p => 'Camera ' + p.n, camInfo: p => 'Image: ' + p.w + ' × ' + p.h + ' px',
     emptyGrid:'No photos yet. Place a dish on the base to start.', exported:'exported',
@@ -564,12 +564,12 @@ const I18N = {
     mailBtn:'Envoyer par e-mail', mailTitle:'Envoyer par e-mail', mailPrepare:'Préparer', mailCopy:"Copier l'adresse", mailNone:'Aucune photo à envoyer.',
     mailSession: p => 'Dernière session : ' + plural(p.n, 'photo', 'photos') + ' (' + p.from + ' – ' + p.to + ')', mailAll: p => 'Toutes les photos (' + p.n + ')',
     mailBadAddr:'Saisissez une adresse e-mail valide.', mailBusy:'Préparation…',
-    mailInfo: p => plural(p.n, 'photo', 'photos') + ', ' + p.mb + ' Mo' + (p.parts > 1 ? ', en ' + p.parts + ' e-mails (limite de taille).' : '.'),
+    mailInfo: p => plural(p.n, 'photo', 'photos') + ', ' + p.mb + ' Mo' + (p.parts > 1 ? ', en ' + p.parts + ' parties.' : '.'),
     mailHowShare: p => 'Appuyez sur chaque partie et choisissez votre messagerie (Outlook, Gmail, Mail…). L\'adresse ' + p.to + ' est copiée : dans le champ « À », appui long puis Coller.',
     mailHowDownload: p => "Cet appareil ne sait pas joindre de fichier directement : les .zip sont téléchargés et un e-mail à " + p.to + " s'ouvre. Joignez-les à la main.",
     mailPart: p => 'Envoyer la partie ' + p.i + '/' + p.n + ' (' + p.mb + ' Mo)', mailPartOne: p => 'Envoyer (' + p.mb + ' Mo)',
     mailSubject: p => 'Petri·Capture – ' + p.date + (p.parts > 1 ? ' (' + p.i + '/' + p.parts + ')' : ''),
-    mailBody: p => plural(p.n, 'photo', 'photos') + ' de Petri·Capture.', mailCopied:'Adresse copiée.', mailShareFail: p => 'Partage impossible : ' + p.e,
+    mailBody: p => plural(p.n, 'photo', 'photos') + ' de Petri·Capture.', mailCopied:'Adresse copiée.', zipRefused:"Cet appareil refuse les .zip : appuyez à nouveau pour envoyer les photos directement.", galleryHow:'10 photos au plus par partage : appuyez sur chaque partie et choisissez où enregistrer.', mailShareFail: p => 'Partage impossible : ' + p.e,
     errNoCam:'Aucune caméra trouvée.', errBusy:'Une autre app utilise la caméra. Fermez-la puis réessayez.',
     errStart: p => 'Impossible de démarrer la caméra (' + p.e + ').', camN: p => 'Caméra ' + p.n, camInfo: p => 'Image : ' + p.w + ' × ' + p.h + ' px',
     emptyGrid:"Aucune photo pour l'instant. Posez une boîte sur le socle pour commencer.", exported:'exportée',
@@ -1396,19 +1396,7 @@ async function markExported(ids){
   for (const id of ids){ await tx('readwrite', s => { const q = s.get(id); q.onsuccess = () => { if (q.result){ q.result.exported = true; s.put(q.result); } }; return q; }); }
 }
 
-$('btnShare').addEventListener('click', async () => {
-  const all = await photoAll(); if (!all.length) return;
-  const files = all.map(r => new File([r.blob], r.name, { type:'image/jpeg' }));
-  if (navigator.canShare && navigator.canShare({ files })){
-    try{
-      await navigator.share({ files });
-      await markExported(all.map(r => r.id)); renderGrid();
-      toast(t('shared', { n:all.length }));
-    }catch(e){ if (e.name !== 'AbortError') toast(t('shareFail', { e:e.message })); }
-  } else {
-    toast(t('shareNA'));
-  }
-});
+
 $('btnZip').addEventListener('click', async () => {
   const all = await photoAll(); if (!all.length) return;
   if (!window.JSZip){ toast(t('zipNA')); return; }
@@ -1448,7 +1436,9 @@ $('btnClearExported').addEventListener('click', async () => {
    Le partage ne sait pas remplir le destinataire : l'adresse est copiée pour être collée dans « À ».
    iPhone : .zip ; Android (Chrome refuse les .zip) : photos jointes directement ; ordinateur sans partage : .zip téléchargés + mailto.
    Les envois sont découpés à 18 Mo, sous la limite habituelle des messageries. Chaque partage doit partir d'un appui (d'où une étape « Préparer »). */
-const MAIL_LIMIT = 18 * 1024 * 1024;
+const MAIL_LIMIT = 18 * 1024 * 1024, SHARE_MAX_FILES = 10; // Chrome refuse plus de 10 fichiers par partage
+// .zip seulement sur iPhone / iPad : Chrome (Android, ordinateur) refuse de partager un .zip même s'il dit le contraire
+const appleMobile = /iPhone|iPad|iPod/.test(navigator.userAgent) || (/Macintosh/.test(navigator.userAgent) && navigator.maxTouchPoints > 1);
 const validMail = a => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(a);
 const hm = id => { const d = new Date(id); return pad(d.getHours()) + 'h' + pad(d.getMinutes()); };
 const dayOf = id => { const d = new Date(id); return d.getFullYear() + '-' + pad(d.getMonth()+1) + '-' + pad(d.getDate()); };
@@ -1461,9 +1451,9 @@ function lastSession(all){
 function canShareType(type, name){
   try{ return !!(navigator.canShare && navigator.canShare({ files:[new File([new Blob(['x'], { type })], name, { type })] })); }catch(e){ return false; }
 }
-function batches(recs){ // groupes de photos sous la limite de taille (une photo trop grosse part seule)
+function batches(recs, maxBytes, maxFiles){ // groupes de photos sous les limites (une photo trop grosse part seule)
   const out = []; let cur = [], size = 0;
-  recs.forEach(r => { if (cur.length && size + r.blob.size > MAIL_LIMIT){ out.push(cur); cur = []; size = 0; } cur.push(r); size += r.blob.size; });
+  recs.forEach(r => { if (cur.length && (size + r.blob.size > maxBytes || cur.length >= maxFiles)){ out.push(cur); cur = []; size = 0; } cur.push(r); size += r.blob.size; });
   if (cur.length) out.push(cur);
   return out;
 }
@@ -1486,53 +1476,88 @@ $('btnMail').addEventListener('click', async () => {
 $('mailCancel').addEventListener('click', () => $('mailDlg').close());
 $('mailClose').addEventListener('click', () => $('mailDlg').close());
 $('mailCopy').addEventListener('click', () => copyAddress(settings.email));
+let mailJob = null; // { recs, addr, mode, gallery }
 $('mailPrepare').addEventListener('click', async () => {
   const addr = $('mailTo').value.trim();
   if (!validMail(addr)){ toast(t('mailBadAddr')); $('mailTo').focus(); return; }
   settings.email = addr; store.set('petri.settings', settings); $('setEmail').value = addr;
   copyAddress(addr); // tant que l'appui est récent (exigé par iPhone)
   const recs = document.querySelector('input[name=mailWhat]:checked').value === 'all' ? mailAllRecs : lastSession(mailAllRecs);
+  const photosOk = canShareType('image/jpeg', 'a.jpg');
+  const mode = !photosOk ? 'download' : (appleMobile && window.JSZip) ? 'zip' : 'photos';
   const btn = $('mailPrepare'); btn.disabled = true; btn.textContent = t('mailBusy');
-  try{
-    const groups = batches(recs), date = dayOf(recs[0].id) + ' ' + hm(recs[0].id), total = recs.reduce((s, r) => s + r.blob.size, 0);
-    const zipOk = !!window.JSZip && canShareType('application/zip', 'a.zip'), photosOk = canShareType('image/jpeg', 'a.jpg');
-    const mode = zipOk ? 'zip' : photosOk ? 'photos' : 'download';
-    mailParts = [];
-    for (let i = 0; i < groups.length; i++){
-      const g = groups[i], suffix = groups.length > 1 ? '_' + (i+1) + '-' + groups.length : '';
-      let files;
-      if (mode === 'photos') files = g.map(r => new File([r.blob], r.name, { type:'image/jpeg' }));
-      else {
-        const zip = new JSZip(); g.forEach(r => zip.file(r.name, r.blob, { binary:true }));
-        const blob = await zip.generateAsync({ type:'blob', compression:'STORE' });
-        files = [new File([blob], 'petri_' + date.replace(' ', '_') + suffix + '.zip', { type:'application/zip' })];
-      }
-      mailParts.push({ files, ids:g.map(r => r.id), n:g.length, size:g.reduce((s, r) => s + r.blob.size, 0),
-        subject:t('mailSubject', { date, i:i+1, parts:groups.length }), body:t('mailBody', { n:g.length }) });
-    }
-    $('mailInfo').textContent = t('mailInfo', { n:recs.length, mb:mb(total), parts:groups.length });
-    $('mailHow').textContent = t(mode === 'download' ? 'mailHowDownload' : 'mailHowShare', { to:addr });
-    const box = $('mailParts'); box.innerHTML = '';
-    mailParts.forEach((p, i) => {
-      const b = document.createElement('button'); b.type = 'button'; b.className = 'btn' + (i === 0 ? ' primary' : '');
-      b.textContent = mailParts.length > 1 ? t('mailPart', { i:i+1, n:mailParts.length, mb:mb(p.size) }) : t('mailPartOne', { mb:mb(p.size) });
-      b.addEventListener('click', () => sendPart(p, b, mode, addr)); box.appendChild(b);
-    });
-    $('mailStep1').hidden = true; $('mailStep2').hidden = false;
-  }catch(e){ toast(t('exportFail', { e:e.message || e })); }
+  try{ await buildParts({ recs, addr, mode, gallery:false }); }catch(e){ toast(t('exportFail', { e:e.message || e })); }
   btn.disabled = false; btn.textContent = t('mailPrepare');
 });
-async function sendPart(p, b, mode, addr){
+async function buildParts(job){
+  mailJob = job;
+  const { recs, addr, mode, gallery } = job;
+  const groups = mode === 'zip' ? batches(recs, MAIL_LIMIT, Infinity)
+    : batches(recs, gallery ? 45 * 1048576 : MAIL_LIMIT, SHARE_MAX_FILES);
+  const date = dayOf(recs[0].id) + ' ' + hm(recs[0].id), total = recs.reduce((s, r) => s + r.blob.size, 0);
+  mailParts = [];
+  for (let i = 0; i < groups.length; i++){
+    const g = groups[i], suffix = groups.length > 1 ? '_' + (i+1) + '-' + groups.length : '';
+    let files;
+    if (mode === 'photos') files = g.map(r => new File([r.blob], r.name, { type:'image/jpeg' }));
+    else {
+      const zip = new JSZip(); g.forEach(r => zip.file(r.name, r.blob, { binary:true }));
+      const blob = await zip.generateAsync({ type:'blob', compression:'STORE' });
+      files = [new File([blob], 'petri_' + date.replace(' ', '_') + suffix + '.zip', { type:'application/zip' })];
+    }
+    mailParts.push({ files, ids:g.map(r => r.id), n:g.length, size:g.reduce((s, r) => s + r.blob.size, 0),
+      subject:gallery ? '' : t('mailSubject', { date, i:i+1, parts:groups.length }), body:gallery ? '' : t('mailBody', { n:g.length }) });
+  }
+  $('mailTitle2').textContent = t(gallery ? 'share' : 'mailTitle');
+  $('mailInfo').textContent = t('mailInfo', { n:recs.length, mb:mb(total), parts:groups.length });
+  $('mailHow').textContent = gallery ? t('galleryHow') : t(mode === 'download' ? 'mailHowDownload' : 'mailHowShare', { to:addr });
+  $('mailCopy').hidden = gallery;
+  const box = $('mailParts'); box.innerHTML = '';
+  mailParts.forEach((p, i) => {
+    const b = document.createElement('button'); b.type = 'button'; b.className = 'btn' + (i === 0 ? ' primary' : '');
+    b.textContent = mailParts.length > 1 ? t('mailPart', { i:i+1, n:mailParts.length, mb:mb(p.size) }) : t('mailPartOne', { mb:mb(p.size) });
+    b.addEventListener('click', () => sendPart(p, b)); box.appendChild(b);
+  });
+  $('mailStep1').hidden = true; $('mailStep2').hidden = false;
+  if (!$('mailDlg').open) $('mailDlg').showModal();
+}
+async function sendPart(p, b){
+  const { mode, addr } = mailJob;
   try{
     if (mode === 'download'){
       p.files.forEach(f => { const u = URL.createObjectURL(f), a = document.createElement('a'); a.href = u; a.download = f.name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(u), 30000); });
       location.href = 'mailto:' + encodeURIComponent(addr) + '?subject=' + encodeURIComponent(p.subject) + '&body=' + encodeURIComponent(p.body);
-    } else await navigator.share({ files:p.files, title:p.subject, text:p.body });
+    } else {
+      const data = { files:p.files }; if (p.subject){ data.title = p.subject; data.text = p.body; }
+      await navigator.share(data);
+    }
     b.classList.add('done'); b.classList.remove('primary'); b.textContent = '✓ ' + b.textContent.replace(/^✓ /, '');
     const next = [...$('mailParts').children].find(x => !x.classList.contains('done')); if (next) next.classList.add('primary');
     await markExported(p.ids); refreshCount(); if ($('sheetPhotos').classList.contains('open')) renderGrid();
-  }catch(e){ if (e && e.name !== 'AbortError') toast(t('mailShareFail', { e:e.message || e })); }
+  }catch(e){
+    if (e && e.name === 'AbortError') return;
+    // .zip refusé par le navigateur : on repasse en photos jointes (il faut un nouvel appui pour partager)
+    if (mode === 'zip' && e && e.name === 'NotAllowedError'){
+      const left = mailJob.recs.filter(r => !mailParts.some(q => q.ids.includes(r.id) && $('mailParts').children[mailParts.indexOf(q)].classList.contains('done')));
+      await buildParts(Object.assign({}, mailJob, { recs:left, mode:'photos' }));
+      toast(t('zipRefused')); return;
+    }
+    toast(t('mailShareFail', { e:e.message || e }));
+  }
 }
+$('btnShare').addEventListener('click', async () => {
+  const all = (await photoAll()).sort((a, b) => a.id - b.id); if (!all.length) return;
+  if (!canShareType('image/jpeg', 'a.jpg')){ toast(t('shareNA')); return; }
+  if (all.length <= SHARE_MAX_FILES){ // un seul partage : on le lance tout de suite, pendant l'appui
+    try{
+      await navigator.share({ files:all.map(r => new File([r.blob], r.name, { type:'image/jpeg' })) });
+      await markExported(all.map(r => r.id)); renderGrid();
+      toast(t('shared', { n:all.length }));
+    }catch(e){ if (e.name !== 'AbortError') toast(t('shareFail', { e:e.message })); }
+    return;
+  }
+  await buildParts({ recs:all, addr:'', mode:'photos', gallery:true });
+});
 
 /* ---------- Réglages ---------- */
 const rangeLabels = []; // réaffichées au changement de langue (séparateur décimal)
