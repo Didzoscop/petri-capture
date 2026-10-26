@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mascotte : atelier</title>
+<style>
+/* Page d'essai de l'animation de la mascotte : même fichier mascot.js que l'app, réglages en direct */
+@font-face{font-family:"ByteBounce";src:url("fonts/ByteBounce.ttf") format("truetype")}
+:root{--bg:#EFE6D2;--paper:#F8F2E4;--ink:#1A1A1A;--muted:#5E5546;--b:3px}
+*{box-sizing:border-box}
+body{margin:0;min-height:100vh;background:var(--bg);color:var(--ink);font:18px/1.35 "ByteBounce","Pixelify Sans",monospace;
+  display:grid;grid-template-columns:1fr minmax(18rem,26rem);gap:1.5rem;padding:1.2rem}
+h1{font-size:1.3rem;margin:0 0 .3rem;text-transform:uppercase;letter-spacing:.08em}
+p{margin:0 0 .8rem;color:var(--muted)}
+.stage{display:flex;align-items:flex-end;justify-content:center;gap:3rem;flex-wrap:wrap;min-height:60vh;
+  border:var(--b) solid var(--ink);background:var(--paper);padding:2rem}
+.stage figure{margin:0;text-align:center}
+.stage figcaption{color:var(--muted);font-size:.85rem;margin-top:.4rem}
+.mascot{flex:none}
+.mascot canvas{display:block;width:100%;height:100%;image-rendering:pixelated}
+#big{width:336px;height:360px}
+#small{width:112px;height:120px}
+.panel{display:flex;flex-direction:column;gap:.9rem}
+.row{display:flex;flex-wrap:wrap;gap:.5rem}
+.btn{border:var(--b) solid var(--ink);background:var(--paper);padding:.3rem .8rem;min-height:38px;font:inherit;cursor:pointer;box-shadow:var(--b) var(--b) 0 var(--ink)}
+.btn:active{transform:translate(var(--b),var(--b));box-shadow:none}
+.btn.primary{background:var(--ink);color:var(--paper)}
+label{display:grid;grid-template-columns:1fr auto;gap:.1rem .6rem;font-size:.95rem}
+label input[type=range]{grid-column:1 / -1;width:100%;accent-color:var(--ink)}
+label b{font-weight:400;color:var(--muted)}
+.check{display:flex;align-items:center;gap:.5rem}
+.group{font-size:.85rem;text-transform:uppercase;letter-spacing:.08em;border-bottom:2px dashed var(--ink);padding-bottom:.2rem;margin-top:.4rem}
+textarea{width:100%;min-height:5rem;font:14px monospace;border:var(--b) solid var(--ink);background:var(--paper);padding:.4rem}
+@media (max-width:760px){ body{grid-template-columns:1fr} #big{width:224px;height:240px} }
+</style>
+</head>
+<body>
+<section>
+  <h1>Atelier de la mascotte</h1>
+  <p>Même dessin et même animation que dans l'app (fichier mascot.js). Les réglages s'appliquent en direct.</p>
+  <div class="stage">
+    <figure><div class="mascot" id="big"></div><figcaption>agrandie</figcaption></figure>
+    <figure><div class="mascot" id="small"></div><figcaption>taille dans l'app</figcaption></figure>
+  </div>
+</section>
+
+<aside class="panel">
+  <div class="group">Gestes</div>
+  <div class="row">
+    <button class="btn primary" data-act="talk">Parler</button>
+    <button class="btn" data-act="rise">Se lever</button>
+    <button class="btn" data-act="jump">Sauter</button>
+    <button class="btn" data-act="spin">Se coucher</button>
+  </div>
+  <label class="check"><input type="checkbox" id="idle" checked> Se relève et regarde autour entre deux rotations</label>
+
+  <div class="group">Rendu</div>
+  <div id="sliders"></div>
+
+  <div class="group">Réglages à me donner</div>
+  <textarea id="out" readonly></textarea>
+  <div class="row"><button class="btn" id="copy">Copier</button><button class="btn" id="reset">Valeurs de départ</button></div>
+</aside>
+
+<script src="mascot.js"></script>
+<script>
+(() => {
+'use strict';
+const $ = id => document.getElementById(id);
+const defaults = Object.assign({}, PetriMascot.OPTIONS);
+let saved = {}; try{ saved = JSON.parse(localStorage.getItem('mascot.lab') || '{}'); }catch(e){}
+for (const k in saved) if (!(k in defaults)) delete saved[k]; // réglages d'anciennes versions
+const opts = Object.assign({}, defaults, saved);
+const ms = [PetriMascot.create($('big'), opts), PetriMascot.create($('small'), opts)];
+// curseurs : [clé, libellé, min, max, pas]
+const SLIDERS = [
+  ['fps', 'Images par seconde', 6, 60, 1], ['scale', 'Finesse des pixels', 1, 3, .5], ['elev', 'Plongée de la caméra (°)', 10, 70, 1],
+  ['wobble', 'Euler : inclinaison au lancer (°)', 0, 30, 1], ['whirl', 'Euler : tours par seconde au lancer', .2, 4, .05],
+  ['whirlMax', 'Euler : accélération finale (×)', 1, 15, .5], ['eulerMin', 'Euler : durée minimale (s)', .5, 10, .1], ['eulerMax', 'Euler : durée maximale (s)', .5, 10, .1],
+  ['restMin', 'À plat : pause minimale (s)', 0, 3, .05], ['restMax', 'À plat : pause maximale (s)', 0, 3, .05],
+  ['riseStiff', 'Relevé : raideur', 10, 200, 1], ['riseDamp', 'Relevé : amorti', 1, 30, .5], ['gravity', 'Chute : gravité', 2, 30, .5],
+  ['bounce', 'Chute : rebond', 0, .8, .02], ['hopSpeed', 'Saut : élan', 5, 60, 1], ['hopGravity', 'Saut : gravité', 20, 300, 5]
+];
+function show(){
+  const diff = {}; for (const k in opts) if (opts[k] !== defaults[k]) diff[k] = opts[k];
+  $('out').value = JSON.stringify(diff);
+  try{ localStorage.setItem('mascot.lab', JSON.stringify(diff)); }catch(e){}
+}
+SLIDERS.forEach(([k, label, min, max, step]) => {
+  const l = document.createElement('label'), v = document.createElement('b'), i = document.createElement('input');
+  i.type = 'range'; i.min = min; i.max = max; i.step = step; i.value = opts[k]; v.textContent = opts[k];
+  l.append(label, v, i); $('sliders').appendChild(l);
+  i.addEventListener('input', () => { opts[k] = +i.value; v.textContent = i.value; ms.forEach(m => m.set({ [k]:opts[k] })); show(); });
+});
+document.querySelectorAll('[data-act]').forEach(b => b.addEventListener('click', () => ms.forEach(m => m[b.dataset.act](b.dataset.act === 'spin' ? undefined : 2500))));
+$('idle').checked = opts.idle;
+$('idle').addEventListener('change', () => { opts.idle = $('idle').checked; ms.forEach(m => { m.set({ idle:opts.idle }); if (opts.idle) m.spin(); }); show(); });
+$('copy').addEventListener('click', () => { $('out').select(); try{ navigator.clipboard.writeText($('out').value); }catch(e){ document.execCommand('copy'); } });
+$('reset').addEventListener('click', () => { try{ localStorage.removeItem('mascot.lab'); }catch(e){} location.reload(); });
+show();
+})();
+</script>
+</body>
+</html>

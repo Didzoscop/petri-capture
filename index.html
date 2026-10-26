@@ -351,138 +351,16 @@ body.manual .meters,body.manual .btn.lens{display:none}
 
 <div class="toast" id="toast" role="status"></div>
 
+<script src="mascot.js"></script>
 <script>
 (() => {
 'use strict';
 const $ = id => document.getElementById(id);
-const APP_VERSION = 'v8 · 26/10'; // à incrémenter à chaque publication
+const APP_VERSION = 'v9 · 26/10'; // à incrémenter à chaque publication
 $('ver').textContent = APP_VERSION;
 
-/* ---------- Mascotte : boîte de Petri en pixel art, rendue image par image ----------
-   Petit moteur 3D en pixels : la tranche du verre est échantillonnée dans l'espace, la face est retrouvée pixel par pixel
-   (lancer de rayon sur son plan), le tout passe par un tampon de profondeur sur une grille 28 × 30, puis est cerné de noir.
-   Une image toutes les 80 ms, comme une animation pixel art. */
-const MW = 28, MH = 30, GY = 24, CX = 14, MR = 8, MTH = 2.4, LEG = 5;
-const CE = Math.cos(35 * Math.PI / 180), SE = Math.sin(35 * Math.PI / 180); // caméra en plongée de 35°
-const MCOL = { ink:[26,26,26], glass:[214,230,226], agar:[242,196,107], edge:[157,183,177], dark:[118,142,136], col:[217,102,63], white:[255,255,255] };
-const calmMotion = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
-const rnd = (a, b) => a + Math.random()*(b - a);
-const dot = (p, q) => p[0]*q[0] + p[1]*q[1] + p[2]*q[2];
-function rot(v, k, a){ // rotation de v autour de l'axe unitaire k (formule de Rodrigues)
-  const c = Math.cos(a), s = Math.sin(a), d = dot(k, v) * (1 - c);
-  return [v[0]*c + (k[1]*v[2] - k[2]*v[1])*s + k[0]*d, v[1]*c + (k[2]*v[0] - k[0]*v[2])*s + k[1]*d, v[2]*c + (k[0]*v[1] - k[1]*v[0])*s + k[2]*d];
-}
-class Mascot{
-  constructor(el){
-    const c = document.createElement('canvas'); c.width = MW; c.height = MH; el.appendChild(c);
-    this.el = el; this.ctx = c.getContext('2d'); this.img = this.ctx.createImageData(MW, MH);
-    this.zb = new Float32Array(MW*MH); this.mask = new Uint8Array(MW*MH);
-    this.stand = 0; this.standV = 0; this.up = false; this.hop = 0; this.hopV = 0;
-    this.phi = Math.random()*6.3; this.psi = 0; this.speed = 1; this.look = 0; this.lookT = 0; this.talking = false; this.t = 0;
-    this.spin();
-  }
-  later(ms, fn){ clearTimeout(this.timer); if (ms != null) this.timer = setTimeout(fn, ms); }
-  // attente : couchée, elle tourne comme un disque d'Euler, puis fait un geste au hasard
-  spin(){ this.up = false; this.talking = false; this.speed = rnd(.75, 1.5); this.later(calmMotion ? null : rnd(2500, 6500), () => this.idle()); }
-  idle(){
-    const r = Math.random();
-    if (r < .45){ this.up = true; this.lookT = (Math.random() < .5 ? -1 : 1) * rnd(.25, .5); this.later(rnd(700, 1800), () => this.spin()); }
-    else if (r < .8){ if (!this.hop) this.hopV = 26; this.later(700, () => this.spin()); }
-    else this.spin();
-  }
-  // parole : elle se lève sur ses jambes et bouge la bouche
-  talk(){ this.up = true; this.talking = true; this.lookT = (Math.random() < .5 ? -1 : 1) * rnd(.15, .3); this.later(1700, () => this.spin()); }
-  step(dt){
-    this.t += dt;
-    if (this.up){ this.standV += (60*(1 - this.stand) - 8*this.standV) * dt; this.stand += this.standV * dt; } // ressort : se relève
-    else { // chute libre puis petits rebonds
-      this.standV -= 7*dt; this.stand += this.standV*dt;
-      if (this.stand < 0){ this.stand = 0; this.standV = this.standV < -.6 ? -this.standV*.3 : 0; }
-    }
-    this.look += ((this.up ? this.lookT : 0) - this.look) * Math.min(1, dt*6);
-    if (this.hop > 0 || this.hopV){ this.hopV -= 90*dt; this.hop += this.hopV*dt; if (this.hop <= 0){ this.hop = 0; this.hopV = 0; } }
-    if (!calmMotion){ this.phi += dt * 2*Math.PI / this.speed; this.psi -= dt * 2*Math.PI / (this.speed*5); }
-  }
-  render(){
-    const d = this.img.data, zb = this.zb, mask = this.mask;
-    d.fill(0); zb.fill(-1e9); mask.fill(0);
-    const s = Math.max(0, Math.min(1.12, this.stand)), s1 = Math.min(1, s), lie = 1 - s1;
-    const legs = Math.max(0, Math.min(1, (s - .55) / .4));
-    const C = [0, MTH/2 + (MR + LEG*legs - MTH/2)*s1 + this.hop, 0];
-    // orientation : debout face à nous (a droite, b haut, n vers nous), basculée en arrière pour se coucher
-    const X = [1, 0, 0], tilt = -(1 - s) * Math.PI/2;
-    let a = X, b = rot([0, 1, 0], X, tilt), n = rot([0, 0, 1], X, tilt);
-    const al = calmMotion ? 0 : 14 * Math.PI/180 * lie, k = [Math.cos(this.phi), 0, Math.sin(this.phi)]; // oscillation du disque d'Euler
-    if (al){ a = rot(a, k, al); b = rot(b, k, al); n = rot(n, k, al); }
-    const Y = [0, 1, 0], lk = this.look * s1;
-    a = rot(a, Y, lk); b = rot(b, Y, lk); n = rot(n, Y, lk);
-    let ps = Math.atan2(Math.sin(this.psi), Math.cos(this.psi)) * lie; // la face tourne quand elle est couchée, se redresse debout
-    const a2 = rot(a, n, ps), b2 = rot(b, n, ps); a = a2; b = b2;
-    const set = (i, c, al) => { d[i*4] = c[0]; d[i*4+1] = c[1]; d[i*4+2] = c[2]; d[i*4+3] = al == null ? 255 : al; };
-    const put = (P, c) => {
-      const sx = Math.floor(CX + P[0]), sy = Math.floor(GY - (P[1]*CE - P[2]*SE));
-      if (sx < 0 || sy < 0 || sx >= MW || sy >= MH) return;
-      const i = sy*MW + sx, z = P[2]*CE + P[1]*SE;
-      if (z > zb[i]){ zb[i] = z; set(i, c); mask[i] = 1; }
-    };
-    // tranche du verre
-    for (let j = 0; j < 220; j++){
-      const th = j / 220 * 2*Math.PI, cu = MR*Math.cos(th), cv = MR*Math.sin(th);
-      for (let h = -MTH/2; h <= MTH/2 + 1e-6; h += MTH/6)
-        put([C[0] + a[0]*cu + b[0]*cv + n[0]*h, C[1] + a[1]*cu + b[1]*cv + n[1]*h, C[2] + a[2]*cu + b[2]*cv + n[2]*h], h < -MTH/2 + .5 ? MCOL.dark : MCOL.edge);
-    }
-    // face visible : on lance un rayon par pixel jusqu'au plan de la face (ou du fond si elle nous tourne le dos)
-    const ED = [0, SE, CE], EU = [0, CE, -SE], nd = dot(n, ED), front = nd > 0, off = (front ? 1 : -1) * MTH/2;
-    const F = [C[0] + n[0]*off, C[1] + n[1]*off, C[2] + n[2]*off];
-    const open = this.talking && Math.floor(this.t / .15) % 2;
-    if (Math.abs(nd) > .04) for (let sy = 0; sy < MH; sy++) for (let sx = 0; sx < MW; sx++){
-      const U = GY - (sy + .5), Xs = sx + .5 - CX;
-      const Q0 = [Xs, U*EU[1], U*EU[2]], tt = dot([F[0] - Q0[0], F[1] - Q0[1], F[2] - Q0[2]], n) / nd;
-      const Q = [Q0[0] + ED[0]*tt, Q0[1] + ED[1]*tt, Q0[2] + ED[2]*tt], R = [Q[0] - F[0], Q[1] - F[1], Q[2] - F[2]];
-      const u = dot(R, a), v = dot(R, b), r = Math.hypot(u, v);
-      if (r > MR) continue;
-      const i = sy*MW + sx; if (tt <= zb[i]) continue;
-      let c;
-      if (!front) c = MCOL.edge;
-      else if (r > MR - .75) c = MCOL.ink;
-      else if (r > MR - 1.7) c = (Math.atan2(v, u) > 1.9 && Math.atan2(v, u) < 2.7) ? MCOL.white : MCOL.glass;
-      else if (Math.abs(Math.abs(u) - 2.6) < .6 && v > .4 && v < 2.6) c = MCOL.ink;                // yeux
-      else if (Math.abs(u) < 1.1 && v < -1.2 && v > (open ? -3.2 : -2.1)) c = MCOL.ink;          // bouche
-      else if (Math.hypot(u + 3.4, v + 2.8) < 1.2 || Math.hypot(u - 3.6, v - 3.4) < .8 || Math.hypot(u - 2.4, v + 4.3) < .75) c = MCOL.col; // colonies
-      else c = MCOL.agar;
-      zb[i] = tt; set(i, c); mask[i] = 1;
-    }
-    // jambes
-    if (legs > 0) [-2.6, 2.6].forEach(lx => {
-      const ly = -Math.sqrt(MR*MR - lx*lx), T = [C[0] + a[0]*lx + b[0]*ly, C[1] + a[1]*lx + b[1]*ly, C[2] + a[2]*lx + b[2]*ly];
-      for (let q = 0; q <= 1; q += .05){
-        const P = [T[0], T[1]*(1 - q), T[2]], sx = Math.floor(CX + P[0]), sy = Math.floor(GY - (P[1]*CE - P[2]*SE));
-        if (sx >= 0 && sy >= 0 && sx < MW && sy < MH && !mask[sy*MW + sx]) set(sy*MW + sx, MCOL.ink);
-      }
-      const fy = Math.floor(GY - (-T[2]*SE)), fx = Math.floor(CX + T[0]) + (lx < 0 ? -1 : 1);
-      if (fx >= 0 && fx < MW && fy >= 0 && fy < MH) set(fy*MW + fx, MCOL.ink);
-    });
-    // contour noir autour de la silhouette, puis ombre au sol
-    const edge = [];
-    for (let i = 0; i < MW*MH; i++){
-      if (mask[i] || d[i*4+3]) continue;
-      const x = i % MW, y = (i / MW) | 0;
-      if ((x > 0 && mask[i-1]) || (x < MW-1 && mask[i+1]) || (y > 0 && mask[i-MW]) || (y < MH-1 && mask[i+MW])) edge.push(i);
-    }
-    edge.forEach(i => set(i, MCOL.ink));
-    const rx = MR*(1 - .4*s1) - this.hop*.3;
-    for (let y = GY - 1; y <= GY + 1; y++) for (let x = 0; x < MW; x++){
-      const i = y*MW + x, dx = (x + .5 - CX) / rx, dy = (y + .5 - GY - .3) / 1.6;
-      if (!d[i*4+3] && dx*dx + dy*dy <= 1) set(i, MCOL.ink, 46);
-    }
-    this.ctx.putImageData(this.img, 0, 0);
-  }
-}
-const mascots = [...document.querySelectorAll('.mascot')].map(el => new Mascot(el));
-setInterval(() => {
-  if (document.hidden) return;
-  mascots.forEach(m => { if (!m.el.getClientRects().length) return; m.step(.08); m.render(); });
-}, 80);
+/* ---------- Mascotte (dessin et animation dans mascot.js) ---------- */
+const mascots = [...document.querySelectorAll('.mascot')].map(el => PetriMascot.create(el));
 function mascotTalk(){ mascots[0].talk(); }
 const video = $('video'), svg = $('overlay');
 const SVGNS = 'http://www.w3.org/2000/svg';
