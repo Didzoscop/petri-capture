@@ -456,13 +456,13 @@ body.manual .meters,body.manual .btn.lens{display:none}
 
 <div class="toast" id="toast" role="status"></div>
 
-<script src="mascot.js?v31"></script> <!-- ?vNN : à changer avec APP_VERSION, pour contourner le cache de GitHub Pages -->
-<script src="demo.js?v31"></script>
+<script src="mascot.js?v32"></script> <!-- ?vNN : à changer avec APP_VERSION, pour contourner le cache de GitHub Pages -->
+<script src="demo.js?v32"></script>
 <script>
 (() => {
 'use strict';
 const $ = id => document.getElementById(id);
-const APP_VERSION = 'v31 · 27/10'; // à incrémenter à chaque publication
+const APP_VERSION = 'v32 · 27/10'; // à incrémenter à chaque publication
 $('ver').textContent = APP_VERSION;
 
 /* ---------- Mascotte (dessin et animation dans mascot.js) ---------- */
@@ -473,13 +473,14 @@ const video = $('video'), svg = $('overlay');
 const SVGNS = 'http://www.w3.org/2000/svg';
 
 /* ---------- Réglages persistants ---------- */
-const DEFAULTS = { sens:20, presence:20, stableMs:1000, motionTol:3.5, focusMs:1500, lockFocus:true, requireLid:true, sharpCheck:true, meters:true, sound:true, deviceId:'', calibMode:'aruco', lang:'en', resolution:'max', email:'', sessionGap:30, mailQuality:'medium' };
+const DEFAULTS = { sens:20, presence:20, stableMs:1000, motionTol:3.5, focusMs:1500, lockFocus:true, requireLid:true, sharpCheck:true, meters:true, sound:true, deviceId:'', zoom:1, calibMode:'aruco', lang:'en', resolution:'max', email:'', sessionGap:30, mailQuality:'medium' };
 const store = {
   get(k, d){ try{ const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; }catch(e){ return d; } },
   set(k, v){ try{ localStorage.setItem(k, JSON.stringify(v)); }catch(e){} }
 };
 const settings = Object.assign({}, DEFAULTS, store.get('petri.settings', {}));
-const calibKey = () => 'petri.calib' + (settings.deviceId ? '.' + settings.deviceId : '');
+let curZoom = settings.zoom || 1; // zoom réellement appliqué (1 si l'objectif ne le permet pas)
+const calibKey = () => 'petri.calib' + (settings.deviceId ? '.' + settings.deviceId : '') + (curZoom > 1 ? '@' + curZoom : ''); // cadrage différent : calibration à part
 let calib = store.get(calibKey(), store.get('petri.calib', null)); // {dish:{h}, lid:{h}, aspect, source}, un par objectif (voir « Socles : géométrie »)
 
 /* ---------- Langues : anglais (par défaut) et français ---------- */
@@ -762,6 +763,14 @@ async function startCamera(){
         if (c.width && c.height && c.width.max && c.height.max) await track.applyConstraints({ width:{ ideal:c.width.max }, height:{ ideal:c.height.max } });
       }catch(e){}
     }
+    // zoom demandé (vue « ×2, ×3… » du bouton Objectif) : sur beaucoup de téléphones, c'est ainsi qu'on passe au téléobjectif
+    curZoom = 1;
+    try{
+      const zc = !demo && track.getCapabilities ? track.getCapabilities().zoom : null;
+      if (zc && settings.zoom > 1){ curZoom = Math.min(zc.max, Math.max(zc.min, settings.zoom)); await track.applyConstraints({ advanced:[{ zoom:curZoom }] }); }
+      else if (zc && zc.min <= 1 && zc.max >= 1) await track.applyConstraints({ advanced:[{ zoom:1 }] });
+    }catch(e){ curZoom = 1; }
+    if (curZoom !== settings.zoom){ settings.zoom = curZoom; store.set('petri.settings', settings); }
     video.srcObject = stream;
     await video.play().catch(() => {});
     await new Promise(r => { if (video.videoWidth) r(); else video.onloadedmetadata = () => r(); });
@@ -787,14 +796,24 @@ async function startCamera(){
 }
 function showStartError(msg){ $('start').classList.remove('hidden'); const b = $('startError'); b.textContent = msg; b.classList.add('show'); }
 
-let lenses = [];
+let lenses = [], views = []; // views : { id, z, label } parcourues par le bouton « Objectif »
 async function listCameras(){
   try{
     const devs = (await navigator.mediaDevices.enumerateDevices()).filter(d => d.kind === 'videoinput');
     // objectifs arrière en priorité pour le bouton « Objectif »
     const back = devs.filter(d => /back|rear|arri[eè]re|environment|t[eé]l[eé]|ultra|wide|grand/i.test(d.label) && !/front|avant|facetime/i.test(d.label));
     lenses = back.length >= 2 ? back : devs;
-    $('btnLens').hidden = lenses.length < 2;
+    // chaque objectif, puis pour l'objectif courant les zooms qu'il accepte (×2, ×3, ×5)
+    const curId = track && track.getSettings ? track.getSettings().deviceId : settings.deviceId;
+    const zc = track && track.getCapabilities ? track.getCapabilities().zoom : null;
+    const zooms = zc && zc.max >= 2 ? [2, 3, 5].filter(z => z <= zc.max) : [];
+    views = [];
+    (lenses.length ? lenses : [{ deviceId:curId, label:'' }]).forEach((d, i) => {
+      const label = d.label || t('camN', { n:i+1 });
+      views.push({ id:d.deviceId, z:1, label });
+      if (d.deviceId === curId) zooms.forEach(z => views.push({ id:d.deviceId, z, label:label + ' ×' + z }));
+    });
+    $('btnLens').hidden = views.length < 2;
     const sel = $('camSelect'); sel.innerHTML = '';
     const cur = track && track.getSettings ? track.getSettings().deviceId : '';
     devs.forEach((d, i) => {
@@ -1024,15 +1043,23 @@ function markerCenter(c){
   const t = ((p1.x - p0.x)*d2y - (p1.y - p0.y)*d2x) / den;
   return { x:p0.x + t*d1x, y:p0.y + t*d1y };
 }
-// détecte sur l'image courante ; renvoie { id: {x, y} } en fractions de l'image, pour les ID 0 à 7
+// détecte sur l'image courante ; renvoie { id: {x, y} } en fractions de l'image, pour les ID 0 à 7.
+// Le seuillage de js-aruco2 regarde une fenêtre de 5 pixels : un marqueur trop gros dans l'image (objectif rapproché,
+// haute résolution) et un peu flou n'est plus vu. On cherche donc aussi sur des versions réduites de l'image ;
+// pour chaque marqueur, on garde la position trouvée à la plus grande taille (la plus précise).
+const DETECT_WIDTHS = [1600, 1100, 760, 520];
 function detectMarkers(src, sw, sh){
-  const s = Math.min(1, 1600 / sw), w = Math.round(sw*s), h = Math.round(sh*s);
-  dcv.width = w; dcv.height = h; dctx.drawImage(src, 0, 0, w, h);
   const out = {};
-  getDetector().detect(dctx.getImageData(0, 0, w, h)).forEach(m => {
-    if (m.id < 0 || m.id > 7) return;
-    const c = markerCenter(m.corners); out[m.id] = { x:c.x / w, y:c.y / h };
-  });
+  for (const maxW of DETECT_WIDTHS){
+    const s = Math.min(1, maxW / sw), w = Math.round(sw*s), h = Math.round(sh*s);
+    if (maxW !== DETECT_WIDTHS[0] && w >= sw) continue; // image déjà plus petite que cette taille : rien de nouveau à voir
+    dcv.width = w; dcv.height = h; dctx.drawImage(src, 0, 0, w, h);
+    getDetector().detect(dctx.getImageData(0, 0, w, h)).forEach(m => {
+      if (m.id < 0 || m.id > 7 || out[m.id]) return;
+      const c = markerCenter(m.corners); out[m.id] = { x:c.x / w, y:c.y / h };
+    });
+    if (Object.keys(out).length >= 8) break;
+  }
   return out;
 }
 const median = a => { const s = a.slice().sort((x, y) => x - y), n = s.length; return n % 2 ? s[(n-1)/2] : (s[n/2-1] + s[n/2]) / 2; };
@@ -1634,18 +1661,18 @@ bindCheck('cMeters', 'meters', () => $('meters').classList.toggle('hidden', !set
 $('meters').classList.toggle('hidden', !settings.meters);
 $('tOk').addEventListener('click', () => { initAudio(); const s = settings.sound; settings.sound = true; sounds.ok(); settings.sound = s; });
 $('tErr').addEventListener('click', () => { initAudio(); const s = settings.sound; settings.sound = true; sounds.err(); settings.sound = s; });
-function useCamera(id, label){
-  settings.deviceId = id; store.set('petri.settings', settings);
+function useCamera(id, label, zoom){
+  settings.deviceId = id; settings.zoom = curZoom = zoom || 1; store.set('petri.settings', settings);
   calib = store.get(calibKey(), null);
   if (label) toast(t('lensT', { l:label }) + (calib ? '' : t('needCalib')));
   startCamera();
 }
 $('camSelect').addEventListener('change', e => useCamera(e.target.value));
 $('btnLens').addEventListener('click', () => {
-  if (lenses.length < 2) return;
+  if (views.length < 2) return;
   const cur = track && track.getSettings ? track.getSettings().deviceId : settings.deviceId;
-  const i = lenses.findIndex(d => d.deviceId === cur), next = lenses[(i + 1) % lenses.length];
-  useCamera(next.deviceId, next.label || t('camN', { n:(i + 1) % lenses.length + 1 }));
+  const i = views.findIndex(v => v.id === cur && v.z === curZoom), next = views[(i + 1) % views.length];
+  useCamera(next.id, next.label, next.z);
 });
 $('btnRef').addEventListener('click', async () => { if (mode !== 'run') return; closeSheets(); await takeReference(); toEmpty(); toast(t('bgUpdated')); });
 $('btnCalib2').addEventListener('click', () => { closeSheets(); if (stream) enterCalibration(); });
