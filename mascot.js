@@ -26,7 +26,11 @@ const OPTIONS = {
   riseStiff: 100, riseDamp: 8, // ressort pour se relever
   gravity: 4.5, bounce: .3,     // chute et rebond
   hopSpeed: 26, hopGravity: 90,
-  idle: true       // se relève et regarde autour d'elle entre deux rotations
+  rollAcc: 7, rollMax: 5,       // roulement sur la tranche : accélération (rayons/s²) et vitesse maximale (rayons/s)
+  bumpBounce: .5,               // part de la vitesse gardée en rebondissant sur l'aperçu
+  jumpGravity: 2600,            // saut depuis le bas de l'écran (px/s²)
+  idle: true,      // se relève et regarde autour d'elle entre deux rotations
+  wall: null       // fonction qui renvoie l'élément contre lequel elle peut rouler (l'aperçu vidéo) ; sans lui, seule l'animation classique
 };
 
 class Mascot{
@@ -34,6 +38,7 @@ class Mascot{
     this.el = el; this.o = Object.assign({}, OPTIONS, opts);
     this.stand = 0; this.standV = 0; this.up = false; this.hop = 0; this.hopV = 0;
     this.phi = Math.random()*6.3; this.psi = 0; this.alpha = 0; this.look = 0; this.lookT = 0; this.talking = false; this.t = 0;
+    this.X = 0; this.V = 0; this.oy = 0; this.oyV = 0; this.noLegs = false; this.legK = 1; // déplacement hors de sa place (X en pixels de la grille, oy en px)
     this.build(); this.euler(Math.random() * .6);
   }
   build(){ // (re)crée la grille selon la finesse choisie
@@ -48,17 +53,34 @@ class Mascot{
   phase(name, dur){ this.ph = name; this.pt = 0; this.pd = dur || 0; }
   /* Animation d'attente, en boucle :
      euler  : le disque tourne de plus en plus vite en s'inclinant de moins en moins, puis s'écrase à plat ;
-     rest   : immobile un instant ;
-     rise   : se relève, regarde à droite puis à gauche ;
-     fall   : se laisse tomber, et l'impact relance la rotation. */
+     rest   : immobile un instant, puis l'une des suites suivantes, tirée au hasard :
+       classique : rise (se relève, regarde à droite puis à gauche), fall (se laisse tomber, l'impact relance la rotation) ;
+       cogne     : se dresse sur la tranche, roule vers l'aperçu vidéo, le cogne, rebondit en arrière et retombe en rotation ;
+       sortie    : roule vers la gauche hors de l'écran, puis revient en sautant depuis le bas de l'écran ;
+     home   : après « cogne », elle revient à sa place en roulant avant de se relever. */
   euler(start, landed){ this.up = false; this.talking = false; this.ramp = !landed; this.phase('euler', rnd(this.o.eulerMin, this.o.eulerMax)); this.pt = (start || 0) * this.pd; }
-  rise(){ this.up = true; this.talking = false; this.lookT = 0; this.phase('rise', 2.6); }
+  rise(){ this.up = true; this.talking = false; this.noLegs = false; this.lookT = 0; this.phase('rise', 2.6); }
+  // dressée sur la tranche, sans jambes, comme une roue ; next : phase de roulement qui suit
+  wheel(next){ this.up = true; this.talking = false; this.noLegs = true; this.lookT = 0; this.V = 0; this.next = next; this.phase('wheel', .6); }
+  // fin du repos : retour à sa place si elle s'en est éloignée, sinon une animation au hasard
+  pick(){
+    if (!this.o.idle || calmMotion) return this.euler();
+    if (Math.abs(this.X) > .5) return this.wheel('home');
+    const r = this.o.wall ? Math.random() : 0;
+    if (r < .4) this.rise(); else if (r < .7) this.wheel('bump'); else this.wheel('exit');
+  }
+  geom(){ // position à l'écran : rectangle de l'élément et taille d'un pixel de la grille (le canevas est centré, object-fit: contain)
+    const r = this.el.getBoundingClientRect();
+    return { r, sc: Math.min(r.width / this.MW, r.height / this.MH) || 1 };
+  }
+  home(){ this.X = 0; this.V = 0; this.oy = 0; this.oyV = 0; }
   // chute : elle part de travers (penchée sur le côté), si bien qu'elle touche le sol par le bord et se met à tourner
   fall(){ this.up = false; this.talking = false; this.omega = 0; this.phi = (Math.random() < .5 ? 0 : Math.PI) + rnd(Math.PI/3, 2*Math.PI/3); this.phase('fall'); }
   spin(){ if (this.stand > .3) this.fall(); else this.euler(); }
   jump(){ if (!this.hop && !this.up) this.hopV = this.o.hopSpeed * this.o.scale; }
   // parole : elle se lève sur ses jambes et bouge la bouche, puis se laisse retomber
-  talk(ms){ this.up = true; this.talking = true; this.lookT = (Math.random() < .5 ? -1 : 1) * rnd(.15, .3); this.phase('talk', (ms || 1700) / 1000); }
+  talk(ms){ if (this.ph === 'exit' || this.ph === 'jumpin') this.home(); // hors de l'écran : elle revient tout de suite pour parler
+    this.up = true; this.noLegs = false; this.talking = true; this.lookT = (Math.random() < .5 ? -1 : 1) * rnd(.15, .3); this.phase('talk', (ms || 1700) / 1000); }
   step(dt){
     const o = this.o; this.t += dt; this.pt += dt;
     // déroulé des phases
@@ -72,7 +94,41 @@ class Mascot{
       this.alpha = Math.max(0, k) * 1.5 * Math.abs(Math.sin(this.pt * 55));
       if (this.pt >= this.pd){ this.alpha = 0; this.phase('rest', rnd(o.restMin, o.restMax)); }
     } else if (this.ph === 'rest'){
-      if (this.pt >= this.pd){ if (o.idle && !calmMotion) this.rise(); else this.euler(); }
+      if (this.pt >= this.pd) this.pick();
+    } else if (this.ph === 'wheel'){
+      if (this.pt >= this.pd) this.phase(this.next);
+    } else if (this.ph === 'bump'){ // roule vers l'aperçu en accélérant…
+      this.V = Math.min(o.rollMax*this.MR, this.V + o.rollAcc*this.MR*dt); this.X += this.V*dt;
+      const w = o.wall && o.wall(), g = this.geom();
+      if (!w) this.phase('back');
+      else {
+        const wl = w.getBoundingClientRect().left, edge = g.r.left + g.r.width/2 + (this.X + this.MR)*g.sc;
+        if (edge >= wl){ // …le cogne et rebondit en arrière avec un petit saut
+          this.X -= (edge - wl) / g.sc; this.V = -this.V*o.bumpBounce;
+          this.hopV = o.hopSpeed*o.scale*.45; this.phase('back');
+        }
+      }
+    } else if (this.ph === 'back'){ // freine en reculant, puis se laisse tomber en rotation
+      this.V *= Math.exp(-2.2*dt); this.X += this.V*dt;
+      if (Math.abs(this.V) < .35*this.MR) this.fall();
+    } else if (this.ph === 'home'){ // revient à sa place en roulant
+      const vmax = .6*o.rollMax*this.MR;
+      this.V = Math.max(-vmax, Math.min(vmax, -this.X*2.5)); if (Math.abs(this.V) < .8*this.MR) this.V = -Math.sign(this.X)*.8*this.MR;
+      this.X += this.V*dt;
+      if (Math.abs(this.X) <= .8*this.MR*dt + .5){ this.X = 0; this.V = 0; this.rise(); }
+    } else if (this.ph === 'exit'){ // roule vers la gauche jusqu'à sortir de l'écran
+      this.V = Math.max(-1.3*o.rollMax*this.MR, this.V - o.rollAcc*this.MR*dt); this.X += this.V*dt;
+      const g = this.geom();
+      if (g.r.left + g.r.width/2 + (this.X + this.MR)*g.sc < -2){
+        // réapparaît sous sa place, debout sur ses jambes, et saute pour la rejoindre
+        this.X = 0; this.V = 0; this.noLegs = false; this.legK = 1; this.stand = 1; this.standV = 0; this.psi = 0;
+        this.oy = Math.max(0, innerHeight - g.r.top) + 4;
+        this.oyV = -Math.sqrt(2*o.jumpGravity*(this.oy + g.r.height*.45));
+        this.phase('jumpin');
+      }
+    } else if (this.ph === 'jumpin'){
+      this.oyV += o.jumpGravity*dt; this.oy += this.oyV*dt;
+      if (this.oyV > 0 && this.oy >= 0){ this.oy = 0; this.oyV = 0; this.standV = -4; this.rise(); } // atterrit en fléchissant les jambes
     } else if (this.ph === 'rise'){
       this.lookT = this.pt < .55 ? 0 : this.pt < 1.25 ? .55 : this.pt < 2 ? -.55 : 0; // à droite, puis à gauche
       if (this.pt >= this.pd) this.fall();
@@ -90,13 +146,16 @@ class Mascot{
       if (this.stand < 0){ this.stand = 0; this.standV = this.standV < -.6 ? -this.standV*o.bounce : 0; }
     }
     this.look = ease(this.look, this.up ? this.lookT : 0, 7, dt);
+    this.legK = ease(this.legK, this.noLegs ? 0 : 1, 10, dt);
     this.faceT = this.up && this.stand > .35 ? (this.faceT || 0) + dt : 0; // temps depuis le retour des yeux
     if (this.hop > 0 || this.hopV){ this.hopV -= o.hopGravity*o.scale*dt; this.hop += this.hopV*dt; if (this.hop <= 0){ this.hop = 0; this.hopV = 0; } }
     if (!calmMotion){
       const lie = 1 - Math.min(1, Math.max(0, this.stand));
       if (this.alpha > .01) this.phi += dt * (this.omega || 0);
       // la face roule lentement avec l'inclinaison (comme un vrai disque d'Euler) et se redresse quand elle se lève
-      if (this.up) this.psi = ease(this.psi, Math.round(this.psi / (2*Math.PI)) * 2*Math.PI, 8, dt);
+      const rolling = this.ph === 'bump' || this.ph === 'back' || this.ph === 'home' || this.ph === 'exit';
+      if (rolling) this.psi -= this.V*dt / this.MR; // roule sans glisser
+      else if (this.up) this.psi = ease(this.psi, Math.round(this.psi / (2*Math.PI)) * 2*Math.PI, 8, dt);
       else this.psi -= dt * (this.omega || 0) * (1 - Math.cos(this.alpha * Math.PI/180)) * 6 * lie;
     }
   }
@@ -107,7 +166,7 @@ class Mascot{
     const GY = MH - (MR * Math.sin(Math.min(90, o.elev + o.wobble) * Math.PI/180) + MTH/2 + 1.5*o.scale);
     d.fill(0); zb.fill(-1e9); mask.fill(0);
     const s = Math.max(0, Math.min(1.12, this.stand)), s1 = Math.min(1, s), lie = 1 - s1;
-    const legs = Math.max(0, Math.min(1, (s - .55) / .4));
+    let legs = Math.max(0, Math.min(1, (s - .55) / .4)) * this.legK; if (legs < .1) legs = 0; // pas de pied résiduel sur la tranche
     const alr = calmMotion ? 0 : this.alpha * Math.PI/180 * lie; // inclinaison du disque d'Euler
     const C = [0, MTH/2 + (MR + LEG*legs - MTH/2)*s1 + MR*Math.sin(alr) + this.hop, 0]; // incliné, le disque repose sur son bord
     // orientation : debout face à nous (a droite, b haut, n vers nous), basculée en arrière pour se coucher
@@ -182,6 +241,14 @@ class Mascot{
       if (!d[i*4+3] && dx*dx + dy*dy <= 1) set(i, MCOL.ink, 46);
     }
     this.ctx.putImageData(this.img, 0, 0);
+    this.place();
+  }
+  // hors de sa place, le canevas passe en position fixe : il peut sortir du panneau sans être coupé ni créer de défilement
+  place(){
+    const c = this.canvas;
+    if (!this.X && !this.oy){ if (c.style.position) c.style.cssText = ''; return; }
+    const { r, sc } = this.geom();
+    c.style.cssText = 'position:fixed;z-index:10;pointer-events:none;left:' + (r.left + this.X*sc) + 'px;top:' + (r.top + this.oy) + 'px;width:' + r.width + 'px;height:' + r.height + 'px';
   }
 }
 
