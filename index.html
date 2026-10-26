@@ -162,7 +162,7 @@ input[type=range]{width:100%;accent-color:var(--ink);min-height:36px}
 .check input{width:22px;height:22px;accent-color:var(--ink)}
 select{width:100%;min-height:44px;border:var(--b) solid var(--ink);border-radius:0;background:var(--bg);padding:0 .6rem}
 .group-title{display:flex;align-items:center;gap:.55rem;font-size:1.75rem;margin:1.4rem 0 .6rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em;border-bottom:2px dashed var(--ink);padding-bottom:.2rem}
-.group-title svg{width:1em;height:1em;flex:none;shape-rendering:crispEdges}
+.group-title svg{width:.9em;height:.9em;flex:none;shape-rendering:crispEdges}
 .row{display:flex;gap:.6rem;flex-wrap:wrap}
 
 .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:.7rem}
@@ -373,7 +373,7 @@ body.manual .meters,body.manual .btn.lens{display:none}
 (() => {
 'use strict';
 const $ = id => document.getElementById(id);
-const APP_VERSION = 'v20 · 26/10'; // à incrémenter à chaque publication
+const APP_VERSION = 'v21 · 26/10'; // à incrémenter à chaque publication
 $('ver').textContent = APP_VERSION;
 
 /* ---------- Mascotte (dessin et animation dans mascot.js) ---------- */
@@ -581,16 +581,16 @@ async function refreshCount(){ try{ $('countBadge').textContent = await photoCou
 
 /* ---------- Interface d'état ---------- */
 // tone : busy = le logiciel travaille (cadre en pointillés qui tournent) ; wait / idle = on attend l'utilisateur ; ok / err
-// icônes pixel (12 × 12) devant les titres de catégorie des réglages
+// icônes pixel (8 × 8, traits épais comme la police des titres) devant les titres de catégorie des réglages
 const GROUP_ICONS = {
-  detect: ['..####......','.#....#.....','#......#....','#......#....','#......#....','#......#....','.#....#.....','..####......','......##....','.......##...','........##..','.........##.'],
-  checks: ['............','###########.','#.........#.','#........##.','#.......##..','#.#....##.#.','#.##..##..#.','#..####...#.','#...##....#.','#.........#.','###########.','............'],
-  camera: ['............','....####....','.##########.','.#........#.','.#..####..#.','.#.#....#.#.','.#.#....#.#.','.#.#....#.#.','.#..####..#.','.#........#.','.##########.','............'],
-  calib:  ['.....#......','...#####....','..#..#..#...','.#...#...#..','.#.......#..','###.....###.','.#.......#..','.#...#...#..','..#..#..#...','...#####....','.....#......','............']
+  detect: ['.####...','#....#..','#....#..','#....#..','#....#..','.####...','....###.','.....###'],
+  checks: ['......##','.....###','#...###.','##.###..','#####...','.###....','..#.....','........'],
+  camera: ['..###...','########','#......#','#..##..#','#.#..#.#','#..##..#','#......#','########'],
+  calib:  ['...##...','..####..','.#.##.#.','###..###','###..###','.#.##.#.','..####..','...##...']
 };
 document.querySelectorAll('[data-gicon]').forEach(e => {
   const px = []; GROUP_ICONS[e.dataset.gicon].forEach((r, y) => [...r].forEach((c, x) => { if (c === '#') px.push('<rect x="' + x + '" y="' + y + '" width="1" height="1"/>'); }));
-  e.insertAdjacentHTML('afterbegin', '<svg viewBox="0 0 12 12" fill="currentColor" aria-hidden="true">' + px.join('') + '</svg>');
+  e.insertAdjacentHTML('afterbegin', '<svg viewBox="0 0 8 8" fill="currentColor" aria-hidden="true">' + px.join('') + '</svg>');
 });
 // les textes peuvent être des fonctions (T(...)) : ils sont recalculés si la langue change
 let lastStatus = null;
