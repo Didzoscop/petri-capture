@@ -8,6 +8,10 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Pixelify+Sans:wght@400;600;700&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<!-- Détection des marqueurs ArUco (js-aruco2) : cv.js, puis aruco.js, puis le dictionnaire 4×4 -->
+<script src="https://cdn.jsdelivr.net/npm/js-aruco2@2.0.0/src/cv.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/js-aruco2@2.0.0/src/aruco.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/js-aruco2@2.0.0/src/dictionaries/aruco_4x4_1000.js"></script>
 <style>
 /* Style rétro : fond beige, encre noire, police pixelisée. Toujours affiché en paysage. */
 :root{
@@ -326,7 +330,8 @@ select{width:100%;min-height:44px;border:var(--b) solid var(--ink);border-radius
     <div class="field"><select id="camSelect" aria-label="Caméra"></select><p id="camInfo"></p></div>
     <div class="row">
       <button class="btn" id="btnRef" type="button">Reprendre le fond vide</button>
-      <button class="btn" id="btnCalib2" type="button">Recalibrer les cercles</button>
+      <button class="btn" id="btnAuto2" type="button">Calibration auto (marqueurs)</button>
+      <button class="btn" id="btnCalib2" type="button">Calibrer à la main</button>
     </div>
   </div>
 </aside>
@@ -338,8 +343,8 @@ select{width:100%;min-height:44px;border:var(--b) solid var(--ink);border-radius
     <h2>Photographier les boîtes sans toucher l'écran</h2>
     <p>Fixez l'appareil sur son support, caméra arrière vers le socle.</p>
     <ol>
-      <li>Placez les cercles : la boîte ouverte et, si le socle du couvercle est activé dans les réglages, son couvercle.</li>
-      <li>Validez avec le socle vide.</li>
+      <li>Laissez le socle vide : l'app repère les marqueurs ArUco et place les cercles toute seule.</li>
+      <li>Vérifiez les cercles affichés, puis enregistrez.</li>
       <li>Posez chaque boîte : la photo part toute seule, un bip confirme.</li>
     </ol>
     <button class="btn primary" id="btnStart" type="button">Démarrer la caméra</button>
@@ -359,7 +364,7 @@ select{width:100%;min-height:44px;border:var(--b) solid var(--ink);border-radius
 (() => {
 'use strict';
 const $ = id => document.getElementById(id);
-const APP_VERSION = 'v5 · 26/10'; // à incrémenter à chaque publication
+const APP_VERSION = 'v6 · 26/10'; // à incrémenter à chaque publication
 $('ver').textContent = APP_VERSION;
 
 /* ---------- Mascotte : boîte de Petri en pixel art 16 × 16 ---------- */
@@ -395,11 +400,11 @@ const store = {
 };
 const settings = Object.assign({}, DEFAULTS, store.get('petri.settings', {}));
 const calibKey = () => 'petri.calib' + (settings.deviceId ? '.' + settings.deviceId : '');
-let calib = store.get(calibKey(), store.get('petri.calib', null)); // {dish:{x,y,r}, lid:{x,y,r}, aspect}, un par objectif
+let calib = store.get(calibKey(), store.get('petri.calib', null)); // {dish:{h}, lid:{h}, aspect, source}, un par objectif (voir « Socles : géométrie »)
 
 /* ---------- État ---------- */
 let stream = null, track = null, W = 0, H = 0;
-let mode = 'start'; // start | calib | run
+let mode = 'start'; // start | auto (calibration ArUco) | calib (manuelle) | run
 let state = 'idle'; // idle | empty | settling | focusing | saving | wait_removal
 let tSince = 0, tFocus = 0, tEmptySince = 0, bestSharp = 0, lastMsg = null;
 let ref = null, prevL = null, refPending = false;
@@ -515,7 +520,7 @@ async function startCamera(){
     listCameras();
     requestWake();
     if (calib && Math.abs(calib.aspect - W/H) < 0.02) startRun(true);
-    else enterCalib(calib ? "La forme de l'image a changé (rotation ou autre caméra). Replacez les cercles." : null);
+    else enterAuto(calib ? "La forme de l'image a changé (rotation ou autre caméra)." : null);
     if (!loopTimer) loop();
   }catch(e){
     const n = e && e.name;
@@ -552,6 +557,7 @@ function onVideoSize(){
   document.documentElement.style.setProperty('--ar', W / H);
   aw = 160; ah = Math.max(2, Math.round(aw * H / W));
   acv.width = aw; acv.height = ah;
+  normCalib();
   if (calib) buildMasks();
   drawOverlay();
 }
@@ -560,7 +566,7 @@ video.addEventListener('resize', () => {
   const oldAspect = W && H ? W/H : 0;
   onVideoSize();
   if (mode === 'run' && calib && Math.abs(calib.aspect - W/H) > 0.02 && oldAspect)
-    enterCalib("La forme de l'image a changé (rotation ?). Replacez les cercles.");
+    enterAuto("La forme de l'image a changé (rotation ?).");
 });
 
 async function requestWake(){
@@ -568,10 +574,86 @@ async function requestWake(){
 }
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && stream) requestWake(); });
 
-/* ---------- Cercles : géométrie ---------- */
-function defaultCalib(){
-  if (H > W) return { dish:{ x:.5, y:.33, r:.42 }, lid:{ x:.5, y:.77, r:.3 }, aspect: W/H }; // portrait : l'un sous l'autre
-  return { dish:{ x:.36, y:.5, r:.34 }, lid:{ x:.76, y:.5, r:.24 }, aspect: W/H };
+/* ---------- Socles : géométrie ----------
+   Chaque socle est décrit par une transformation h (matrice 3 × 3, 9 nombres) qui envoie ses coordonnées
+   en millimètres (centre du cercle = origine, nord = +Y) vers l'image, en fractions de la largeur et de la hauteur.
+   Calibration automatique : homographie (4 marqueurs) ou affine (3) ; manuelle : cercle = simple mise à l'échelle. */
+const SOCLE_R = 51.5;            // rayon du socle (103 mm)
+const MARK_D = 35.75;            // distance centre du socle → centre d'un marqueur
+const MARK_POS = [[0, MARK_D], [MARK_D, 0], [0, -MARK_D], [-MARK_D, 0]]; // ID % 4 : nord, est, sud, ouest
+const MARK_NAME = ['nord', 'est', 'sud', 'ouest'];
+const SOCLE_IDS = { dish:[0, 1, 2, 3], lid:[4, 5, 6, 7] };
+const SOCLE_NAME = { dish:'Socle boîte', lid:'Socle couvercle' };
+
+function project(h, X, Y){
+  const w = h[6]*X + h[7]*Y + h[8];
+  return { x:(h[0]*X + h[1]*Y + h[2]) / w, y:(h[3]*X + h[4]*Y + h[5]) / w };
+}
+function invert3(m){
+  const [a,b,c,d,e,f,g,h,i] = m, A = e*i - f*h, B = f*g - d*i, C = d*h - e*g, det = a*A + b*B + c*C;
+  return [A/det, (c*h - b*i)/det, (b*f - c*e)/det, B/det, (a*i - c*g)/det, (c*d - a*f)/det, C/det, (b*g - a*h)/det, (a*e - b*d)/det];
+}
+// résolution d'un petit système linéaire (élimination de Gauss avec pivot partiel)
+function solve(A, b){
+  const n = b.length, M = A.map((r, i) => r.concat(b[i]));
+  for (let c = 0; c < n; c++){
+    let p = c; for (let r = c + 1; r < n; r++) if (Math.abs(M[r][c]) > Math.abs(M[p][c])) p = r;
+    if (Math.abs(M[p][c]) < 1e-12) return null;
+    [M[c], M[p]] = [M[p], M[c]];
+    for (let r = 0; r < n; r++){ if (r === c) continue; const k = M[r][c] / M[c][c]; for (let j = c; j <= n; j++) M[r][j] -= k*M[c][j]; }
+  }
+  return M.map((r, i) => r[n] / r[i]);
+}
+// pts : [{X, Y, x, y}] (mm → image) ; 4 points : homographie, 3 points : affine
+function fitTransform(pts){
+  if (pts.length >= 4){
+    const A = [], b = [];
+    pts.slice(0, 4).forEach(p => {
+      A.push([p.X, p.Y, 1, 0, 0, 0, -p.x*p.X, -p.x*p.Y]); b.push(p.x);
+      A.push([0, 0, 0, p.X, p.Y, 1, -p.y*p.X, -p.y*p.Y]); b.push(p.y);
+    });
+    const s = solve(A, b); return s && s.concat(1);
+  }
+  const A = [], b = [];
+  pts.forEach(p => { A.push([p.X, p.Y, 1, 0, 0, 0]); b.push(p.x); A.push([0, 0, 0, p.X, p.Y, 1]); b.push(p.y); });
+  const s = solve(A, b); return s && [s[0], s[1], s[2], s[3], s[4], s[5], 0, 0, 1];
+}
+// déterminant local de la transformation, en pixels : négatif si l'image n'est pas inversée (nord = +Y, image y vers le bas)
+function localDet(h, X, Y){
+  const e = .5, p = project(h, X, Y), px = project(h, X + e, Y), py = project(h, X, Y + e);
+  return ((px.x - p.x)*(py.y - p.y) - (px.y - p.y)*(py.x - p.x)) * W * H / (e*e);
+}
+function circleToH(c){ // cercle manuel {x, y, r} (fractions) → transformation
+  const sx = c.r*mn() / (SOCLE_R*W), sy = c.r*mn() / (SOCLE_R*H);
+  return [sx, 0, c.x, 0, -sy, c.y, 0, 0, 1];
+}
+function circleFromH(h){ // transformation → cercle approché, pour la calibration manuelle
+  const c = project(h, 0, 0);
+  const r = MARK_POS.reduce((s, [X, Y]) => { const p = project(h, X/MARK_D*SOCLE_R, Y/MARK_D*SOCLE_R); return s + Math.hypot((p.x - c.x)*W, (p.y - c.y)*H); }, 0) / 4;
+  return { x:c.x, y:c.y, r:r / mn() };
+}
+// ancien format {dish:{x,y,r}, lid:{x,y,r}} → transformations
+function normCalib(){
+  if (!calib || !W) return;
+  ['dish','lid'].forEach(k => { const s = calib[k]; if (s && !s.h && s.r != null) calib[k] = { h:circleToH(s) }; });
+  if (!calib.lid || !calib.lid.h) calib.lid = { h:circleToH(defaultCircles().lid) };
+  if (!calib.dish || !calib.dish.h) calib = null;
+}
+// zone d'un socle en pixels de l'image : centre, contour projeté, rayon inscrit et encadrement
+function zonePx(h){
+  const s = SOCLE_R, c = project(h, 0, 0), pts = [];
+  let rMin = Infinity, x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+  for (let i = 0; i < 64; i++){
+    const t = i / 64 * 2 * Math.PI, p = project(h, s*Math.cos(t), s*Math.sin(t)), x = p.x*W, y = p.y*H;
+    pts.push([x, y]); rMin = Math.min(rMin, Math.hypot(x - c.x*W, y - c.y*H));
+    x0 = Math.min(x0, x); y0 = Math.min(y0, y); x1 = Math.max(x1, x); y1 = Math.max(y1, y);
+  }
+  return { cx:c.x*W, cy:c.y*H, pts, rMin, x0, y0, x1, y1 };
+}
+
+function defaultCircles(){
+  if (H > W) return { dish:{ x:.5, y:.33, r:.42 }, lid:{ x:.5, y:.77, r:.3 } };
+  return { dish:{ x:.36, y:.5, r:.34 }, lid:{ x:.76, y:.5, r:.24 } };
 }
 const mn = () => Math.min(W, H);
 function circlePx(c){ return { cx:c.x*W, cy:c.y*H, r:c.r*mn() }; }
@@ -580,51 +662,57 @@ const lidOn = () => !!settings.requireLid;
 const circleKeys = () => lidOn() ? ['dish','lid'] : ['dish'];
 const placeMsg = () => (lidOn() ? 'Posez une boîte ouverte et son couvercle dans leurs cercles.' : 'Posez une boîte ouverte dans son cercle.') + (focusLocked ? ' Mise au point verrouillée.' : '');
 function buildMasks(){
-  const d = [], l = [], o = [], m = Math.min(aw, ah);
-  const D = { x:calib.dish.x*aw, y:calib.dish.y*ah, r:calib.dish.r*m };
-  const L = { x:calib.lid.x*aw,  y:calib.lid.y*ah,  r:calib.lid.r*m };
+  const d = [], l = [], o = [], lid = lidOn();
+  const iD = invert3(calib.dish.h), iL = invert3(calib.lid.h);
+  const dist = (m, u, v) => { const p = project(m, u, v); return Math.hypot(p.x, p.y) / SOCLE_R; };
   for (let y = 0; y < ah; y++) for (let x = 0; x < aw; x++){
-    const px = x + .5, py = y + .5, i = y*aw + x;
-    const dd = Math.hypot(px - D.x, py - D.y), dl = Math.hypot(px - L.x, py - L.y);
-    const lid = lidOn();
-    if (dd < D.r * .92) d.push(i);
-    else if (lid && dl < L.r * .92) l.push(i);
-    else if (dd > D.r * 1.2 && (!lid || dl > L.r * 1.2)) o.push(i);
+    const u = (x + .5) / aw, v = (y + .5) / ah, i = y*aw + x;
+    const dd = dist(iD, u, v), dl = dist(iL, u, v);
+    if (dd < .92) d.push(i);
+    else if (lid && dl < .92) l.push(i);
+    else if (dd > 1.2 && (!lid || dl > 1.2)) o.push(i);
   }
   idxDish = Int32Array.from(d); idxLid = Int32Array.from(l); idxOut = Int32Array.from(o);
 }
 
 /* ---------- Overlay SVG ---------- */
 function el(name, attrs){ const e = document.createElementNS(SVGNS, name); for (const k in attrs) e.setAttribute(k, attrs[k]); return e; }
+const COLOR = { dish:'var(--dish)', lid:'var(--lid)' };
+const LABEL = { dish:'Boîte', lid:'Couvercle' };
+function svgLabel(text, x, y, fill, fs){
+  const t = el('text', { x, y, 'text-anchor':'middle', 'font-size':fs, 'font-weight':700, fill, stroke:'#111', 'stroke-width':fs*0.14, 'paint-order':'stroke', 'font-family':'Pixelify Sans, monospace' });
+  t.textContent = text; return t;
+}
+function drawZone(k, h, stroke, dashed){
+  const z = zonePx(h), fs = mn() * 0.045;
+  svg.appendChild(el('polygon', { points:z.pts.map(p => p[0].toFixed(1) + ',' + p[1].toFixed(1)).join(' '), fill:'none', stroke,
+    'stroke-width':3, 'stroke-dasharray': dashed ? '10 8' : 'none', 'vector-effect':'non-scaling-stroke', opacity:.95 }));
+  svg.appendChild(svgLabel(LABEL[k], z.cx, z.y0 - fs*0.4, stroke, fs));
+}
 function drawOverlay(){
   svg.innerHTML = '';
-  if (!W || !calib) return;
-  const fs = mn() * 0.045;
-  const color = { dish:'var(--dish)', lid:'var(--lid)' };
-  const label = { dish:'Boîte', lid:'Couvercle' };
-  let stroke = null;
-  if (mode === 'run'){
-    stroke = { empty:'#F8F2E4', settling:'#E0A526', focusing:'#E0A526', saving:'#E0A526', retry:'#D2452F', wait_removal: lastMsg && lastMsg.ok === false ? '#D2452F' : '#3A9A5B' }[state] || '#F8F2E4';
-  }
-  circleKeys().forEach(k => {
-    const c = circlePx(calib[k]);
-    const g = el('g', { 'data-k':k });
-    if (mode === 'calib'){
-      g.appendChild(el('circle', { cx:c.cx, cy:c.cy, r:c.r, fill:'rgba(255,255,255,0.08)', stroke:color[k], 'stroke-width':4, 'vector-effect':'non-scaling-stroke', 'data-role':'move', style:'cursor:move' }));
+  if (!W) return;
+  if (mode === 'auto'){ drawAuto(); return; }
+  if (mode === 'calib'){
+    const fs = mn() * 0.045;
+    circleKeys().forEach(k => {
+      const c = circlePx(manual[k]), g = el('g', { 'data-k':k });
+      g.appendChild(el('circle', { cx:c.cx, cy:c.cy, r:c.r, fill:'rgba(255,255,255,0.08)', stroke:COLOR[k], 'stroke-width':4, 'vector-effect':'non-scaling-stroke', 'data-role':'move', style:'cursor:move' }));
       const hx = c.cx + c.r, hy = c.cy;
       g.appendChild(el('circle', { cx:hx, cy:hy, r:mn()*0.05, fill:'transparent', 'data-role':'size', style:'cursor:ew-resize' }));
-      g.appendChild(el('circle', { cx:hx, cy:hy, r:mn()*0.022, fill:color[k], stroke:'#061114', 'stroke-width':2, 'vector-effect':'non-scaling-stroke', 'data-role':'size', style:'cursor:ew-resize' }));
-    } else {
-      g.appendChild(el('circle', { cx:c.cx, cy:c.cy, r:c.r, fill:'none', stroke:stroke, 'stroke-width':3, 'stroke-dasharray': k === 'lid' ? '10 8' : 'none', 'vector-effect':'non-scaling-stroke', opacity:.9 }));
-    }
-    const t = el('text', { x:c.cx, y:c.cy - c.r - fs*0.4, 'text-anchor':'middle', 'font-size':fs, 'font-weight':700, fill: mode === 'calib' ? color[k] : stroke, stroke:'#061114', 'stroke-width':fs*0.12, 'paint-order':'stroke', 'font-family':'Pixelify Sans, monospace' });
-    t.textContent = label[k]; g.appendChild(t);
-    svg.appendChild(g);
-  });
+      g.appendChild(el('circle', { cx:hx, cy:hy, r:mn()*0.022, fill:COLOR[k], stroke:'#111', 'stroke-width':2, 'vector-effect':'non-scaling-stroke', 'data-role':'size', style:'cursor:ew-resize' }));
+      g.appendChild(svgLabel(LABEL[k], c.cx, c.cy - c.r - fs*0.4, COLOR[k], fs));
+      svg.appendChild(g);
+    });
+    return;
+  }
+  if (!calib) return;
+  const stroke = { empty:'#F8F2E4', settling:'#E0A526', focusing:'#E0A526', saving:'#E0A526', retry:'#D2452F', wait_removal: lastMsg && lastMsg.ok === false ? '#D2452F' : '#3A9A5B' }[state] || '#F8F2E4';
+  circleKeys().forEach(k => drawZone(k, calib[k].h, stroke, k === 'lid'));
 }
 
-/* Glisser-déposer des cercles */
-let drag = null;
+/* Glisser-déposer des cercles (calibration manuelle) */
+let drag = null, manual = null;
 function svgPoint(ev){
   const p = svg.createSVGPoint(); p.x = ev.clientX; p.y = ev.clientY;
   return p.matrixTransform(svg.getScreenCTM().inverse());
@@ -633,13 +721,13 @@ svg.addEventListener('pointerdown', ev => {
   if (mode !== 'calib') return;
   const role = ev.target.getAttribute('data-role'); if (!role) return;
   const k = ev.target.parentNode.getAttribute('data-k');
-  const p = svgPoint(ev), c = circlePx(calib[k]);
+  const p = svgPoint(ev), c = circlePx(manual[k]);
   drag = { k, role, dx:p.x - c.cx, dy:p.y - c.cy, id:ev.pointerId };
   svg.setPointerCapture(ev.pointerId); ev.preventDefault();
 });
 svg.addEventListener('pointermove', ev => {
   if (!drag || ev.pointerId !== drag.id) return;
-  const p = svgPoint(ev), c = calib[drag.k];
+  const p = svgPoint(ev), c = manual[drag.k];
   if (drag.role === 'move'){
     c.x = Math.min(1, Math.max(0, (p.x - drag.dx) / W));
     c.y = Math.min(1, Math.max(0, (p.y - drag.dy) / H));
@@ -649,26 +737,141 @@ svg.addEventListener('pointermove', ev => {
   }
   drawOverlay();
 });
-const endDrag = ev => { if (drag && ev.pointerId === drag.id){ drag = null; store.set(calibKey(), calib); } };
+function applyManual(){
+  calib = { dish:{ h:circleToH(manual.dish) }, lid:{ h:circleToH(manual.lid) }, aspect:W/H, source:'manuel' };
+}
+const endDrag = ev => { if (drag && ev.pointerId === drag.id){ drag = null; applyManual(); store.set(calibKey(), calib); } };
 svg.addEventListener('pointerup', endDrag); svg.addEventListener('pointercancel', endDrag);
+
+/* ---------- Calibration automatique par les marqueurs ArUco ---------- */
+let detector = null, autoRun = 0, auto = null; // auto : { found, fits, pending, problems }
+const dcv = document.createElement('canvas'), dctx = dcv.getContext('2d', { willReadFrequently:true });
+function getDetector(){
+  if (!detector && window.AR && AR.DICTIONARIES && AR.DICTIONARIES.ARUCO_4X4_1000)
+    detector = new AR.Detector({ dictionaryName:'ARUCO_4X4_1000' }); // les 50 premiers codes = DICT_4X4_50 d'OpenCV
+  return detector;
+}
+// centre d'un marqueur : intersection des diagonales (insensible à la rotation de la tuile et juste en perspective)
+function markerCenter(c){
+  const [p0, p1, p2, p3] = c, d1x = p2.x - p0.x, d1y = p2.y - p0.y, d2x = p3.x - p1.x, d2y = p3.y - p1.y;
+  const den = d1x*d2y - d1y*d2x;
+  if (Math.abs(den) < 1e-9) return { x:(p0.x + p1.x + p2.x + p3.x)/4, y:(p0.y + p1.y + p2.y + p3.y)/4 };
+  const t = ((p1.x - p0.x)*d2y - (p1.y - p0.y)*d2x) / den;
+  return { x:p0.x + t*d1x, y:p0.y + t*d1y };
+}
+// détecte sur l'image courante ; renvoie { id: {x, y} } en fractions de l'image, pour les ID 0 à 7
+function detectMarkers(src, sw, sh){
+  const s = Math.min(1, 1600 / sw), w = Math.round(sw*s), h = Math.round(sh*s);
+  dcv.width = w; dcv.height = h; dctx.drawImage(src, 0, 0, w, h);
+  const out = {};
+  getDetector().detect(dctx.getImageData(0, 0, w, h)).forEach(m => {
+    if (m.id < 0 || m.id > 7) return;
+    const c = markerCenter(m.corners); out[m.id] = { x:c.x / w, y:c.y / h };
+  });
+  return out;
+}
+const median = a => { const s = a.slice().sort((x, y) => x - y), n = s.length; return n % 2 ? s[(n-1)/2] : (s[n/2-1] + s[n/2]) / 2; };
+// calcule la transformation d'un socle à partir des marqueurs trouvés
+function fitSocle(k, found){
+  const ids = SOCLE_IDS[k], have = ids.filter(id => found[id]), missing = ids.filter(id => !found[id]);
+  const names = list => list.map(id => id + ' (' + MARK_NAME[id % 4] + ')').join(', ');
+  if (have.length < 3) return { k, missing, few:true, error: SOCLE_NAME[k] + ' : ' + (have.length ? 'manquent ' : 'aucun marqueur, manquent ') + names(missing) + '.' };
+  const h = fitTransform(have.map(id => ({ X:MARK_POS[id % 4][0], Y:MARK_POS[id % 4][1], x:found[id].x, y:found[id].y })));
+  if (!h) return { k, missing, error: SOCLE_NAME[k] + ' : marqueurs alignés, calcul impossible.' };
+  // contrôle : pas d'image inversée ni repliée sur toute la surface du socle
+  for (let i = 0; i <= 16; i++){
+    const t = i / 16 * 2 * Math.PI, r = i === 16 ? 0 : SOCLE_R;
+    if (!(localDet(h, r*Math.cos(t), r*Math.sin(t)) < 0))
+      return { k, missing, error: SOCLE_NAME[k] + ' : disposition incohérente (marqueurs inversés ou mal identifiés ?).' };
+  }
+  const area = Math.abs(localDet(h, 0, 0)) * Math.PI * SOCLE_R * SOCLE_R / (W*H);
+  if (area < .005 || area > .9) return { k, missing, error: SOCLE_NAME[k] + ' : taille aberrante dans l\'image.' };
+  return { k, h, have, missing, kind: have.length >= 4 ? 'homographie' : 'affine', scale: Math.sqrt(Math.abs(localDet(h, 0, 0))) };
+}
+async function enterAuto(reason){
+  const run = ++autoRun;
+  unlockFocus();
+  mode = 'auto'; state = 'idle'; ref = null; auto = null; drawOverlay();
+  if (!getDetector()){
+    setStatus('err', 'Détection des marqueurs indisponible', "Le module ArUco n'a pas pu se charger (connexion ?). Utilisez la calibration manuelle.",
+      [{ label:'Réessayer', fn: () => enterAuto() }, { label:'Calibrer à la main', primary:true, fn: () => enterCalib() }]);
+    return;
+  }
+  setStatus('busy', 'Recherche des marqueurs…', (reason ? reason + ' ' : '') + 'Laissez le socle vide.', [{ label:'Calibrer à la main', fn: () => enterCalib() }]);
+  // plusieurs images : un marqueur doit être vu au moins 2 fois, on garde la médiane de ses centres
+  const seen = {}, need = ids => ids.every(id => seen[id] && seen[id].length >= 3);
+  let frames = 0;
+  for (; frames < 10; frames++){
+    await new Promise(r => setTimeout(r, 120));
+    if (run !== autoRun || mode !== 'auto') return;
+    try{
+      const f = detectMarkers(video, W, H);
+      for (const id in f) (seen[id] = seen[id] || []).push(f[id]);
+    }catch(e){}
+    if (frames >= 3 && need(SOCLE_IDS.dish) && (!lidOn() || need(SOCLE_IDS.lid))) break;
+  }
+  const found = {};
+  for (const id in seen) if (seen[id].length >= 2) found[id] = { x:median(seen[id].map(p => p.x)), y:median(seen[id].map(p => p.y)) };
+  const fits = circleKeys().map(k => fitSocle(k, found));
+  if (fits.length === 2 && !fits[0].error && !fits[1].error){
+    const ratio = fits[0].scale / fits[1].scale;
+    if (ratio < .6 || ratio > 1.65) fits[1].error = 'Les deux socles ont des tailles très différentes dans l\'image : vérifiez les ID des marqueurs.';
+  }
+  auto = { found, fits };
+  const errors = fits.filter(f => f.error);
+  if (errors.length){
+    drawOverlay();
+    setStatus('err', 'Calibration impossible', errors.map(f => f.error).join(' ') + (errors.some(f => f.few) ? ' Il faut au moins 3 marqueurs visibles par socle.' : ''),
+      [{ label:'Réessayer', primary:true, fn: () => enterAuto() }, { label:'Calibrer à la main', fn: () => enterCalib() }]);
+    return;
+  }
+  const prevLid = calib && calib.lid && calib.lid.h ? calib.lid : { h:circleToH(defaultCircles().lid) };
+  auto.pending = { dish:{ h:fits[0].h }, lid: lidOn() ? { h:fits[1].h } : prevLid, aspect:W/H, source:'aruco' };
+  drawOverlay();
+  const detail = fits.map(f => SOCLE_NAME[f.k] + ' : ' + f.have.length + ' marqueurs' + (f.missing.length ? ' (manque ' + f.missing.map(id => id + ' ' + MARK_NAME[id % 4]).join(', ') + ', calcul affine)' : '')).join(' · ');
+  setStatus('wait', 'Calibration trouvée', detail + '. Les cercles suivent-ils bien les socles ? Le socle doit rester vide.',
+    [{ label:'Enregistrer', primary:true, fn: () => { if (!auto || !auto.pending) return; calib = auto.pending; auto = null; startRun(false); } },
+     { label:'Réessayer', fn: () => enterAuto() }, { label:'Calibrer à la main', fn: () => enterCalib() }]);
+}
+// affichage du résultat : marqueurs trouvés (carrés pleins), manquants estimés (pointillés), zones projetées
+function drawAuto(){
+  if (!auto) return;
+  const fs = mn() * 0.034, sz = mn() * 0.03;
+  auto.fits.forEach(f => {
+    if (f.h){
+      if (auto.pending) drawZone(f.k, f.h, COLOR[f.k], false);
+      f.missing.forEach(id => { const p = project(f.h, MARK_POS[id % 4][0], MARK_POS[id % 4][1]);
+        svg.appendChild(el('rect', { x:p.x*W - sz/2, y:p.y*H - sz/2, width:sz, height:sz, fill:'none', stroke:'#D2452F', 'stroke-width':3, 'stroke-dasharray':'6 5', 'vector-effect':'non-scaling-stroke' }));
+        svg.appendChild(svgLabel(id + ' ?', p.x*W, p.y*H - sz*0.9, '#D2452F', fs)); });
+    }
+  });
+  for (const id in auto.found){
+    const p = auto.found[id], k = id < 4 ? 'dish' : 'lid';
+    svg.appendChild(el('rect', { x:p.x*W - sz/2, y:p.y*H - sz/2, width:sz, height:sz, fill:COLOR[k], stroke:'#111', 'stroke-width':2, 'vector-effect':'non-scaling-stroke' }));
+    svg.appendChild(svgLabel(String(id), p.x*W, p.y*H - sz*0.9, COLOR[k], fs));
+  }
+}
 
 /* ---------- Modes ---------- */
 function enterCalib(reason){
+  autoRun++; auto = null;
   unlockFocus();
   mode = 'calib'; state = 'idle'; ref = null;
-  if (!calib || Math.abs(calib.aspect - W/H) > 0.02) calib = defaultCalib();
+  const def = defaultCircles();
+  manual = calib && Math.abs(calib.aspect - W/H) <= 0.02 ? { dish:circleFromH(calib.dish.h), lid:circleFromH(calib.lid.h) } : def;
   drawOverlay();
   setStatus('idle', lidOn() ? 'Placez les deux cercles' : 'Placez le cercle de la boîte',
     (reason ? reason + ' ' : '') + (lidOn() ? "Faites glisser chaque cercle, la poignée à droite change sa taille." : "Faites glisser le cercle, la poignée à droite change sa taille.") + " Laissez le socle vide, puis validez.",
-    [{ label:'Valider (socle vide)', primary:true, fn: () => startRun(false) }]);
+    [{ label:'Valider (socle vide)', primary:true, fn: () => { applyManual(); startRun(false); } }, { label:'Calibration auto', fn: () => enterAuto() }]);
 }
 async function startRun(silent){
+  autoRun++;
   calib.aspect = W/H; store.set(calibKey(), calib);
   buildMasks(); mode = 'run';
   await takeReference();
   state = 'empty'; lastMsg = null; drawOverlay();
   setStatus('wait', 'Prêt', placeMsg(), runActions());
-  if (!silent) toast('Fond vide enregistré.');
+  if (!silent) toast('Calibration et fond vide enregistrés.');
 }
 async function takeReference(){
   refPending = true;
@@ -726,7 +929,7 @@ function changedFrac(d, base){
   return idxDish.length ? c / idxDish.length : 0;
 }
 function dishSquare(){
-  const c = circlePx(calib.dish), r = c.r * .78;
+  const c = zonePx(calib.dish.h), r = c.rMin * .78;
   let x = Math.max(0, c.cx - r), y = Math.max(0, c.cy - r);
   let s = Math.min(2*r, W - x, H - y);
   return { x, y, s };
@@ -744,9 +947,10 @@ function sharpness(){
   const m = s/k; return s2/k - m*m;
 }
 function cropRect(){
-  const a = circlePx(calib.dish), b = lidOn() ? circlePx(calib.lid) : a, pad = 1.08;
-  let x0 = Math.min(a.cx - a.r*pad, b.cx - b.r*pad), y0 = Math.min(a.cy - a.r*pad, b.cy - b.r*pad);
-  let x1 = Math.max(a.cx + a.r*pad, b.cx + b.r*pad), y1 = Math.max(a.cy + a.r*pad, b.cy + b.r*pad);
+  // encadrement des zones projetées, agrandi de 8 % autour de chaque centre
+  const zs = (lidOn() ? ['dish','lid'] : ['dish']).map(k => zonePx(calib[k].h)), pad = 1.08;
+  let x0 = Math.min(...zs.map(z => z.cx - (z.cx - z.x0)*pad)), y0 = Math.min(...zs.map(z => z.cy - (z.cy - z.y0)*pad));
+  let x1 = Math.max(...zs.map(z => z.cx + (z.x1 - z.cx)*pad)), y1 = Math.max(...zs.map(z => z.cy + (z.y1 - z.cy)*pad));
   x0 = Math.max(0, Math.floor(x0)); y0 = Math.max(0, Math.floor(y0));
   x1 = Math.min(W, Math.ceil(x1)); y1 = Math.min(H, Math.ceil(y1));
   return { x:x0, y:y0, w:x1-x0, h:y1-y0 };
@@ -851,7 +1055,7 @@ async function beginFocus(now){
     const caps = track.getCapabilities ? track.getCapabilities() : {};
     const adv = {};
     if (caps.focusMode && caps.focusMode.includes('single-shot')) adv.focusMode = 'single-shot';
-    if (caps.pointsOfInterest !== undefined) adv.pointsOfInterest = [{ x:calib.dish.x, y:calib.dish.y }];
+    if (caps.pointsOfInterest !== undefined) { const c = project(calib.dish.h, 0, 0); adv.pointsOfInterest = [{ x:c.x, y:c.y }]; }
     if (Object.keys(adv).length) await track.applyConstraints({ advanced:[adv] });
   }catch(e){}
 }
@@ -1015,6 +1219,7 @@ function bindCheck(id, key, after){
 bindCheck('cLid', 'requireLid', () => {
   if (calib && W){ buildMasks(); drawOverlay(); }
   if (mode === 'calib') enterCalib();
+  else if (mode === 'auto') enterAuto();
   else if (mode === 'run' && state === 'empty') setStatus('wait', 'Prêt', placeMsg(), runActions());
 }); bindCheck('cSharp', 'sharpCheck'); bindCheck('cLock', 'lockFocus', () => { if (!settings.lockFocus) unlockFocus(); }); bindCheck('cSound', 'sound');
 bindCheck('cMeters', 'meters', () => $('meters').classList.toggle('hidden', !settings.meters));
@@ -1024,7 +1229,7 @@ $('tErr').addEventListener('click', () => { initAudio(); const s = settings.soun
 function useCamera(id, label){
   settings.deviceId = id; store.set('petri.settings', settings);
   calib = store.get(calibKey(), null);
-  if (label) toast('Objectif : ' + label + (calib ? '' : '. Placez les cercles pour cet objectif.'));
+  if (label) toast('Objectif : ' + label + (calib ? '' : '. Calibration nécessaire pour cet objectif.'));
   startCamera();
 }
 $('camSelect').addEventListener('change', e => useCamera(e.target.value));
@@ -1036,10 +1241,11 @@ $('btnLens').addEventListener('click', () => {
 });
 $('btnRef').addEventListener('click', async () => { if (mode !== 'run') return; closeSheets(); await takeReference(); toEmpty(); toast('Fond vide mis à jour.'); });
 $('btnCalib2').addEventListener('click', () => { closeSheets(); if (stream) enterCalib(); });
+$('btnAuto2').addEventListener('click', () => { closeSheets(); if (stream) enterAuto(); });
 
 /* ---------- En-tête ---------- */
 $('btnStart').addEventListener('click', () => { initAudio(); startCamera(); try{ navigator.storage && navigator.storage.persist && navigator.storage.persist(); }catch(e){} });
-$('btnCalib').addEventListener('click', () => { if (stream) enterCalib(); });
+$('btnCalib').addEventListener('click', () => { if (stream) enterAuto(); });
 $('btnPhotos').addEventListener('click', () => { openSheet('sheetPhotos'); renderGrid(); });
 $('btnSettings').addEventListener('click', () => { openSheet('sheetSettings'); listCameras(); });
 $('btnFull').addEventListener('click', () => {
