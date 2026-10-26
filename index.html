@@ -4,6 +4,12 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Capture des boîtes de Petri</title>
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#EFE6D2">
+<link rel="icon" type="image/png" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Petri">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Pixelify+Sans:wght@400;600;700&display=swap" rel="stylesheet">
@@ -19,7 +25,8 @@
   --wait:#E0A526; --ok:#3A9A5B; --err:#D2452F; --viewer:#111;
   --dish:#F2C14E; --lid:#6EC5D9;
   --b:3px; /* épaisseur des traits */
-  --ar:1.7778; /* proportions de l'image caméra, mises à jour par le script */
+  --ar:1.7778;
+  --side:clamp(15rem,32vw,24rem); /* largeur du panneau de gauche */ /* proportions de l'image caméra, mises à jour par le script */
   color-scheme: light;
   box-sizing:border-box;
   padding-top:env(safe-area-inset-top,0px);
@@ -31,18 +38,18 @@ body{
   height:100%;margin:0;background:var(--bg);color:var(--ink);
   font-family:"Pixelify Sans",ui-monospace,"Courier New",monospace;
   font-size:17px;line-height:1.35;-webkit-tap-highlight-color:transparent;
-  display:grid;grid-template-rows:auto 1fr;overflow:hidden;
+  display:grid;grid-template-columns:var(--side) 1fr;overflow:hidden;
   padding-left:env(safe-area-inset-left,0px);padding-right:env(safe-area-inset-right,0px);
 }
 button,select,input{font:inherit;color:inherit}
 button{cursor:pointer}
 :focus-visible{outline:var(--b) dashed var(--ink);outline-offset:3px}
 
-header{
-  display:flex;align-items:center;gap:.5rem;padding:.35rem .9rem;
-  border-bottom:var(--b) solid var(--ink);background:var(--paper);
-}
-.brand{display:flex;align-items:baseline;gap:.6rem;margin-right:auto;white-space:nowrap}
+/* Panneau de gauche : titre, mascotte et bulle, boutons ; l'aperçu occupe la droite */
+.side{display:flex;flex-direction:column;gap:.7rem;padding:.7rem .3rem .8rem 1rem;min-height:0;overflow:auto}
+.brand{display:flex;align-items:baseline;gap:.6rem;white-space:nowrap}
+.nav{display:grid;grid-template-columns:1fr 1fr;gap:.55rem;margin-top:auto;padding:0 var(--b) var(--b) 0}
+.nav .btn{justify-content:center}
 .brand h1{font-size:1.2rem;margin:0;font-weight:700;letter-spacing:.08em;text-transform:uppercase}
 .ver{font-size:.75rem;color:var(--muted)}
 .btn{
@@ -56,27 +63,29 @@ header{
 .btn[disabled]{opacity:.4;cursor:default}
 .count{background:var(--ink);color:var(--paper);padding:0 .4rem;font-size:.85rem;min-width:1.6rem;text-align:center}
 
-/* Zone principale : la mascotte et sa bulle au-dessus, l'image encadrée en dessous */
-main{display:grid;grid-template-rows:auto 1fr;gap:.6rem;padding:.6rem 1rem .8rem;min-height:0}
-.talk{display:flex;align-items:flex-end;gap:1.1rem;min-height:0;max-width:min(100%,62rem);width:100%;justify-self:center}
+/* Mascotte au-dessus de sa bulle ; la bulle reprend le message et ses boutons */
+main{position:relative;display:grid;min-height:0;padding:.6rem 1rem .8rem .6rem}
+.talk{display:flex;flex-direction:column;align-items:center;gap:1rem;min-height:0}
 .bubble{
-  position:relative;flex:1;min-width:0;display:flex;align-items:center;gap:.6rem 1rem;flex-wrap:wrap;
-  background:var(--paper);border:var(--b) solid var(--ink);padding:.45rem .8rem;
-  box-shadow:var(--b) var(--b) 0 var(--ink);margin-bottom:.5rem;
+  position:relative;align-self:stretch;display:flex;flex-direction:column;gap:.6rem;
+  background:var(--paper);border:var(--b) solid var(--ink);padding:.55rem .75rem;
+  box-shadow:var(--b) var(--b) 0 var(--ink);
 }
-/* queue de la bulle, en marches d'escalier, vers la mascotte */
+/* queue de la bulle, en marches d'escalier, vers la mascotte au-dessus */
 .bubble::before,.bubble::after{
-  content:'';position:absolute;top:50%;width:15px;height:18px;transform:translateY(-50%);
-  clip-path:polygon(100% 0,100% 100%,60% 100%,60% 83%,40% 83%,40% 67%,20% 67%,20% 56%,0 56%,0 44%,20% 44%,20% 33%,40% 33%,40% 17%,60% 17%,60% 0);
+  content:'';position:absolute;left:50%;width:18px;height:15px;transform:translateX(-50%);
+  clip-path:polygon(0 100%,100% 100%,100% 60%,83% 60%,83% 40%,67% 40%,67% 20%,56% 20%,56% 0,44% 0,44% 20%,33% 20%,33% 40%,17% 40%,17% 60%,0 60%);
 }
-.bubble::before{left:-15px;background:var(--ink)}
-.bubble::after{left:-10px;background:var(--paper)}
-.bubble .txt{display:flex;flex-direction:column;min-width:0;flex:1 1 16rem}
-.bubble .big{font-size:clamp(1.15rem,4.4vh,2.1rem);font-weight:700;line-height:1.1}
-.bubble .small{font-size:clamp(.85rem,2.7vh,1.15rem);color:var(--muted)}
+.bubble::before{top:-15px;background:var(--ink)}
+.bubble::after{top:-10px;background:var(--paper)}
+.bubble .txt{display:flex;flex-direction:column;min-width:0}
+.bubble .big{font-size:clamp(1.1rem,4.4vh,1.9rem);font-weight:700;line-height:1.1}
+.bubble .small{font-size:clamp(.85rem,2.7vh,1.1rem);color:var(--muted)}
 .bubble[data-tone="ok"] .big{color:var(--ok)}
 .bubble[data-tone="err"] .big{color:var(--err)}
-.bubble .actions{display:flex;gap:.5rem;flex-wrap:wrap;margin-left:auto}
+.bubble .actions{display:flex;flex-direction:column;gap:.5rem}
+.bubble .actions:empty{display:none}
+.bubble .actions .btn{justify-content:center}
 
 .stage{container-type:size;display:grid;place-items:center;min-height:0}
 .frame{
@@ -98,7 +107,7 @@ main{display:grid;grid-template-rows:auto 1fr;gap:.6rem;padding:.6rem 1rem .8rem
 @keyframes ants{to{background-position:24px 0,-24px 100%,0 -24px,100% 24px}}
 .screen{
   position:relative;overflow:hidden;background:var(--viewer);aspect-ratio:var(--ar);
-  width:calc(min(100cqw - 20px, (100cqh - 20px) * var(--ar)) * var(--fit,.84));
+  width:calc(min(100cqw - 20px, (100cqh - 20px) * var(--ar)) * var(--fit,.97));
 }
 video{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;background:var(--viewer)}
 svg#overlay{position:absolute;inset:0;width:100%;height:100%;touch-action:none}
@@ -116,27 +125,39 @@ svg#overlay{position:absolute;inset:0;width:100%;height:100%;touch-action:none}
 .btn.lens[hidden]{display:none}
 .meters.hidden{display:none}
 
-/* Mascotte : boîte de Petri en pixel art (dessin généré par le script) */
-.mascot{--s:5px;position:relative;flex:none;width:calc(16*var(--s));height:calc(22*var(--s));perspective:calc(90*var(--s))}
+/* Mascotte : boîte de Petri en pixel art, en relief (couches empilées en 3D, dessinées par le script) */
+.mascot{--s:5px;--look:-24deg;--spin:1s;position:relative;flex:none;width:calc(16*var(--s));height:calc(22*var(--s));perspective:calc(90*var(--s))}
 .mascot svg{display:block;width:100%;height:100%;shape-rendering:crispEdges}
+.m-shadow{
+  position:absolute;left:15%;bottom:calc(-.5*var(--s));width:70%;height:calc(2.5*var(--s));
+  background:rgba(26,26,26,.2);border-radius:50%;transition:transform .4s ease;
+}
 .m-body{
   position:absolute;left:0;bottom:0;width:calc(16*var(--s));height:calc(16*var(--s));
   transform-style:preserve-3d;transform-origin:50% 85%;
+  transform:translateY(0) rotateX(62deg) rotateY(0deg);
   transition:transform .5s cubic-bezier(.34,1.5,.6,1);
 }
-.m-disc{width:100%;height:100%;transform-style:preserve-3d}
+.m-disc{position:absolute;inset:0;transform-style:preserve-3d}
+.m-disc svg{position:absolute;inset:0}
+.m-side{transform:translateZ(calc(var(--z)*var(--s)*-1))} /* épaisseur du verre */
 .m-legs{
   position:absolute;left:0;bottom:0;width:calc(16*var(--s));height:calc(5*var(--s)) !important;
-  transform:scaleY(0);transform-origin:50% 0;transition:transform .25s ease;
+  transform:scaleY(0);transform-origin:50% 0;transition:transform .12s ease;
 }
-/* attente : couchée, elle tourne comme un disque d'Euler */
-.mascot[data-pose="spin"] .m-body{transform:rotateX(62deg)}
-.mascot[data-pose="spin"] .m-disc{animation:euler 1s linear infinite}
-.mascot[data-pose="spin"] .m-face{animation:turn 5s linear infinite}
-/* parole : elle se lève sur ses jambes */
-.mascot[data-pose="talk"] .m-body{transform:translateY(calc(-5*var(--s))) rotateX(0deg)}
-.mascot[data-pose="talk"] .m-legs{transform:scaleY(1);transition-delay:.15s}
+/* attente : couchée, elle tourne comme un disque d'Euler (vitesse tirée au hasard) */
+.mascot:is([data-pose="spin"],[data-pose="hop"]) .m-disc{animation:euler var(--spin) linear infinite}
+.mascot:is([data-pose="spin"],[data-pose="hop"]) .m-face{animation:turn calc(var(--spin)*5) linear infinite}
+/* petit saut sur place */
+.mascot[data-pose="hop"] .m-body{animation:hop .6s ease-out}
+.mascot[data-pose="hop"] .m-shadow{animation:shadow-hop .6s ease-out}
+/* debout sur ses jambes (parole ou geste au hasard), tournée de 3/4 pour montrer son épaisseur */
+.mascot:is([data-pose="talk"],[data-pose="stand"]) .m-body{transform:translateY(calc(-5*var(--s))) rotateX(0deg) rotateY(var(--look))}
+.mascot:is([data-pose="talk"],[data-pose="stand"]) .m-legs{transform:scaleY(1);transition:transform .25s ease .15s}
+.mascot:is([data-pose="talk"],[data-pose="stand"]) .m-shadow{transform:scaleX(.6)}
 .mascot[data-pose="talk"] .m-mouth{animation:yap .3s steps(1) infinite}
+/* elle retombe à plat, avec un rebond */
+.mascot[data-pose="fall"] .m-body{animation:fall .8s forwards}
 @keyframes euler{
   0%{transform:rotate3d(1,0,0,16deg)}
   12.5%{transform:rotate3d(.71,.71,0,16deg)}
@@ -148,12 +169,26 @@ svg#overlay{position:absolute;inset:0;width:100%;height:100%;touch-action:none}
   87.5%{transform:rotate3d(.71,-.71,0,16deg)}
   100%{transform:rotate3d(1,0,0,16deg)}
 }
+@keyframes hop{
+  0%{transform:translateY(0) rotateX(62deg) rotateY(0deg)}
+  40%{transform:translateY(calc(-4*var(--s))) rotateX(48deg) rotateY(0deg)}
+  70%{transform:translateY(0) rotateX(68deg) rotateY(0deg)}
+  100%{transform:translateY(0) rotateX(62deg) rotateY(0deg)}
+}
+@keyframes shadow-hop{40%{transform:scaleX(.7);opacity:.6}}
+@keyframes fall{
+  0%{transform:translateY(calc(-5*var(--s))) rotateX(0deg) rotateY(var(--look));animation-timing-function:cubic-bezier(.55,0,.9,.4)}
+  55%{transform:translateY(0) rotateX(72deg) rotateY(0deg);animation-timing-function:ease-out}
+  72%{transform:translateY(calc(-1.5*var(--s))) rotateX(54deg) rotateY(0deg);animation-timing-function:ease-in}
+  87%{transform:translateY(0) rotateX(66deg) rotateY(0deg)}
+  100%{transform:translateY(0) rotateX(62deg) rotateY(0deg)}
+}
 @keyframes turn{to{transform:rotate(-360deg)}}
 @keyframes yap{50%{transform:scaleY(2.5)}}
 .m-mouth{transform-box:fill-box;transform-origin:50% 0}
 
 @media (prefers-reduced-motion: reduce){
-  .mascot[data-pose] .m-disc,.mascot[data-pose] .m-face,.mascot[data-pose] .m-mouth{animation:none}
+  .mascot[data-pose] .m-disc,.mascot[data-pose] .m-face,.mascot[data-pose] .m-mouth,.mascot[data-pose] .m-body,.mascot[data-pose] .m-shadow{animation:none}
   .m-body,.m-legs{transition-duration:.15s}
   .frame[data-tone="busy"]{animation-duration:2.4s}
   .flash.go{animation-duration:.35s}
@@ -220,6 +255,15 @@ select{width:100%;min-height:44px;border:var(--b) solid var(--ink);border-radius
 }
 .toast.show{display:block}
 
+/* Calibration manuelle : l'aperçu prend tout l'écran, avec seulement Annuler et Confirmer */
+.manual-bar{position:absolute;left:50%;bottom:.8rem;transform:translateX(-50%);display:none;gap:.8rem}
+body.manual{grid-template-columns:1fr}
+body.manual .side{display:none}
+body.manual main{padding:.5rem}
+body.manual .screen{--fit:.99}
+body.manual .manual-bar{display:flex}
+body.manual .meters,body.manual .btn.lens{display:none}
+
 /* L'app est prévue pour le paysage : en portrait, on demande de tourner l'appareil */
 .rotate{position:fixed;inset:0;z-index:50;background:var(--bg);display:none;place-items:center;align-content:center;gap:1.2rem;padding:2rem;text-align:center}
 .rotate .mascot{--s:8px}
@@ -227,30 +271,23 @@ select{width:100%;min-height:44px;border:var(--b) solid var(--ink);border-radius
 @media (orientation:portrait){ .rotate{display:grid} }
 /* paysage peu haut (téléphone) : on resserre */
 @media (max-height:480px){
-  header{padding:.2rem .7rem}
-  header .btn{min-height:34px;padding:.15rem .6rem;font-size:.9rem}
+  .side{padding:.4rem .2rem .5rem .7rem;gap:.45rem}
+  .side .btn{min-height:34px;padding:.15rem .5rem;font-size:.9rem}
+  .nav{gap:.4rem}
   .brand h1{font-size:1rem}
-  main{padding:.4rem .8rem .6rem;gap:.35rem}
+  main{padding:.4rem .7rem .5rem .4rem}
   .mascot{--s:4px}
   .screen{--fit:.98}
   .meters{font-size:.68rem;padding:.2rem .4rem}
   .bubble{padding:.3rem .6rem}
-  .bubble .btn{min-height:34px;padding:.15rem .6rem}
   .start-card .mascot{--s:5px}
 }
 </style>
 </head>
 <body>
 
-<header>
+<aside class="side">
   <div class="brand"><h1>Petri·Capture</h1><span class="ver" id="ver"></span></div>
-  <button class="btn" id="btnCalib" type="button">Calibrer</button>
-  <button class="btn" id="btnPhotos" type="button">Photos <span class="count" id="countBadge">0</span></button>
-  <button class="btn" id="btnSettings" type="button">Réglages</button>
-  <button class="btn" id="btnFull" type="button" aria-label="Plein écran">⛶</button>
-</header>
-
-<main>
   <div class="talk">
     <div class="mascot" id="mascot" data-pose="spin" aria-hidden="true"></div>
     <div class="bubble" id="status" data-tone="idle" role="status" aria-live="polite">
@@ -258,6 +295,15 @@ select{width:100%;min-height:44px;border:var(--b) solid var(--ink);border-radius
       <div class="actions" id="stActions"></div>
     </div>
   </div>
+  <nav class="nav">
+    <button class="btn" id="btnCalib" type="button">Calibrer</button>
+    <button class="btn" id="btnPhotos" type="button">Photos <span class="count" id="countBadge">0</span></button>
+    <button class="btn" id="btnSettings" type="button">Réglages</button>
+    <button class="btn" id="btnFull" type="button" aria-label="Plein écran">⛶ Plein écran</button>
+  </nav>
+</aside>
+
+<main>
   <div class="stage">
     <div class="frame" id="frame" data-tone="idle">
       <div class="screen" id="viewer">
@@ -270,6 +316,10 @@ select{width:100%;min-height:44px;border:var(--b) solid var(--ink);border-radius
           <span>Couvercle</span><b id="mLid">–</b>
           <span>Mouvement</span><b id="mMotion">–</b>
           <span>Netteté</span><b id="mSharp">–</b>
+        </div>
+        <div class="manual-bar">
+          <button class="btn" id="btnManCancel" type="button">Annuler</button>
+          <button class="btn primary" id="btnManOk" type="button">Confirmer</button>
         </div>
       </div>
     </div>
@@ -328,11 +378,18 @@ select{width:100%;min-height:44px;border:var(--b) solid var(--ink);border-radius
 
     <div class="group-title">Caméra</div>
     <div class="field"><select id="camSelect" aria-label="Caméra"></select><p id="camInfo"></p></div>
-    <div class="row">
-      <button class="btn" id="btnRef" type="button">Reprendre le fond vide</button>
-      <button class="btn" id="btnAuto2" type="button">Calibration auto (marqueurs)</button>
-      <button class="btn" id="btnCalib2" type="button">Calibrer à la main</button>
+    <div class="row"><button class="btn" id="btnRef" type="button">Reprendre le fond vide</button></div>
+
+    <div class="group-title">Calibration</div>
+    <div class="field">
+      <label for="selCalib">Mode de calibration</label>
+      <select id="selCalib">
+        <option value="aruco">Automatique : marqueurs ArUco</option>
+        <option value="manuel">Manuel : cercles à placer</option>
+      </select>
+      <p>Utilisé par le bouton « Calibrer » et au démarrage. En automatique, la calibration manuelle reste proposée si les marqueurs ne sont pas trouvés.</p>
     </div>
+    <div class="row"><button class="btn" id="btnCalib2" type="button">Calibrer maintenant</button></div>
   </div>
 </aside>
 
@@ -364,36 +421,57 @@ select{width:100%;min-height:44px;border:var(--b) solid var(--ink);border-radius
 (() => {
 'use strict';
 const $ = id => document.getElementById(id);
-const APP_VERSION = 'v6 · 26/10'; // à incrémenter à chaque publication
+const APP_VERSION = 'v7 · 26/10'; // à incrémenter à chaque publication
 $('ver').textContent = APP_VERSION;
 
-/* ---------- Mascotte : boîte de Petri en pixel art 16 × 16 ---------- */
+/* ---------- Mascotte : boîte de Petri en pixel art 16 × 16, en relief ---------- */
 (function drawMascots(){
-  const INK = '#1A1A1A', GLASS = '#D6E6E2', AGAR = '#F2C46B', px = [];
-  const cell = (x, y, f) => px.push('<rect x="' + x + '" y="' + y + '" width="1" height="1" fill="' + f + '"/>');
-  for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++){
-    const d = Math.hypot(x - 7.5, y - 7.5);
-    if (d <= 7.6) cell(x, y, d > 6.6 ? INK : d > 5.7 ? GLASS : AGAR);
-  }
-  [[3,5],[4,4],[5,3]].forEach(([x, y]) => cell(x, y, '#FFFFFF'));         // reflet du verre
-  [[4,10],[5,10],[4,11],[11,4],[10,11]].forEach(([x, y]) => cell(x, y, '#D9663F')); // colonies
-  [[5,6],[5,7],[10,6],[10,7]].forEach(([x, y]) => cell(x, y, INK));       // yeux
+  const INK = '#1A1A1A', GLASS = '#D6E6E2', AGAR = '#F2C46B', EDGE = '#9DB7B1';
+  const cell = (px, x, y, f) => px.push('<rect x="' + x + '" y="' + y + '" width="1" height="1" fill="' + f + '"/>');
+  const disc = (fill) => { const px = []; for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++){
+    const d = Math.hypot(x - 7.5, y - 7.5); if (d <= 7.6) cell(px, x, y, fill(d)); } return px; };
+  const px = disc(d => d > 6.6 ? INK : d > 5.7 ? GLASS : AGAR);
+  [[3,5],[4,4],[5,3]].forEach(([x, y]) => cell(px, x, y, '#FFFFFF'));                 // reflet du verre
+  [[4,10],[5,10],[4,11],[11,4],[10,11]].forEach(([x, y]) => cell(px, x, y, '#D9663F')); // colonies
+  [[5,6],[5,7],[10,6],[10,7]].forEach(([x, y]) => cell(px, x, y, INK));               // yeux
   const face = '<svg class="m-face" viewBox="0 0 16 16">' + px.join('') + '<rect class="m-mouth" x="7" y="9" width="2" height="1" fill="' + INK + '"/></svg>';
+  // tranche du verre : trois couches empilées derrière la face
+  const sideSvg = disc(d => d > 6.6 ? INK : EDGE).join('');
+  const sides = [3, 2, 1].map(z => '<svg class="m-side" style="--z:' + z + '" viewBox="0 0 16 16">' + sideSvg + '</svg>').join('');
   const legs = '<svg class="m-legs" viewBox="0 0 16 5"><rect x="5" y="0" width="1" height="4" fill="' + INK + '"/><rect x="10" y="0" width="1" height="4" fill="' + INK + '"/>'
     + '<rect x="4" y="4" width="2" height="1" fill="' + INK + '"/><rect x="10" y="4" width="2" height="1" fill="' + INK + '"/></svg>';
-  document.querySelectorAll('.mascot').forEach(m => { m.innerHTML = '<div class="m-body"><div class="m-disc">' + face + '</div></div>' + legs; });
+  document.querySelectorAll('.mascot').forEach(m => { m.innerHTML = '<div class="m-shadow"></div><div class="m-body"><div class="m-disc">' + sides + face + '</div></div>' + legs; });
 })();
-// La mascotte se lève pour « dire » chaque nouveau message, puis se recouche et tourne (attente)
-let talkT = null;
+/* Pendant les attentes, la mascotte tourne et fait de temps en temps un geste au hasard :
+   elle se relève puis retombe, saute sur place, ou change de vitesse. Elle se lève aussi pour « dire » chaque nouveau message. */
+const calmMotion = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
+const rnd = (a, b) => a + Math.random()*(b - a);
+function mascotSet(m, pose, ms, next){
+  clearTimeout(m._t); m.dataset.pose = pose;
+  if (ms) m._t = setTimeout(next, ms);
+}
+function mascotSpin(m){
+  m.style.setProperty('--spin', rnd(.75, 1.5).toFixed(2) + 's');
+  mascotSet(m, 'spin', calmMotion ? 0 : rnd(2500, 6500), () => mascotIdle(m));
+}
+function mascotFall(m){ mascotSet(m, 'fall', 800, () => mascotSpin(m)); }
+function mascotIdle(m){
+  const r = Math.random();
+  if (r < .45){ m.style.setProperty('--look', (Math.random() < .5 ? -1 : 1) * rnd(15, 30) + 'deg'); mascotSet(m, 'stand', rnd(700, 1800), () => mascotFall(m)); }
+  else if (r < .8) mascotSet(m, 'hop', 600, () => mascotSpin(m));
+  else mascotSpin(m);
+}
+document.querySelectorAll('.mascot').forEach(mascotSpin);
 function mascotTalk(){
-  const m = $('mascot'); m.dataset.pose = 'talk';
-  clearTimeout(talkT); talkT = setTimeout(() => { m.dataset.pose = 'spin'; }, 1700);
+  const m = $('mascot');
+  if (m.dataset.pose !== 'talk' && m.dataset.pose !== 'stand') m.style.setProperty('--look', (Math.random() < .5 ? -1 : 1) * rnd(10, 20) + 'deg');
+  mascotSet(m, 'talk', 1700, () => mascotFall(m));
 }
 const video = $('video'), svg = $('overlay');
 const SVGNS = 'http://www.w3.org/2000/svg';
 
 /* ---------- Réglages persistants ---------- */
-const DEFAULTS = { sens:20, presence:20, stableMs:1000, motionTol:3.5, focusMs:1500, lockFocus:true, requireLid:true, sharpCheck:true, meters:true, sound:true, deviceId:'' };
+const DEFAULTS = { sens:20, presence:20, stableMs:1000, motionTol:3.5, focusMs:1500, lockFocus:true, requireLid:true, sharpCheck:true, meters:true, sound:true, deviceId:'', calibMode:'aruco' };
 const store = {
   get(k, d){ try{ const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; }catch(e){ return d; } },
   set(k, v){ try{ localStorage.setItem(k, JSON.stringify(v)); }catch(e){} }
@@ -520,7 +598,7 @@ async function startCamera(){
     listCameras();
     requestWake();
     if (calib && Math.abs(calib.aspect - W/H) < 0.02) startRun(true);
-    else enterAuto(calib ? "La forme de l'image a changé (rotation ou autre caméra)." : null);
+    else enterCalibration(calib ? "La forme de l'image a changé (rotation ou autre caméra)." : null);
     if (!loopTimer) loop();
   }catch(e){
     const n = e && e.name;
@@ -566,7 +644,7 @@ video.addEventListener('resize', () => {
   const oldAspect = W && H ? W/H : 0;
   onVideoSize();
   if (mode === 'run' && calib && Math.abs(calib.aspect - W/H) > 0.02 && oldAspect)
-    enterAuto("La forme de l'image a changé (rotation ?).");
+    enterCalibration("La forme de l'image a changé (rotation ?).");
 });
 
 async function requestWake(){
@@ -740,7 +818,7 @@ svg.addEventListener('pointermove', ev => {
 function applyManual(){
   calib = { dish:{ h:circleToH(manual.dish) }, lid:{ h:circleToH(manual.lid) }, aspect:W/H, source:'manuel' };
 }
-const endDrag = ev => { if (drag && ev.pointerId === drag.id){ drag = null; applyManual(); store.set(calibKey(), calib); } };
+const endDrag = ev => { if (drag && ev.pointerId === drag.id) drag = null; };
 svg.addEventListener('pointerup', endDrag); svg.addEventListener('pointercancel', endDrag);
 
 /* ---------- Calibration automatique par les marqueurs ArUco ---------- */
@@ -790,7 +868,7 @@ function fitSocle(k, found){
 }
 async function enterAuto(reason){
   const run = ++autoRun;
-  unlockFocus();
+  leaveManual(); unlockFocus();
   mode = 'auto'; state = 'idle'; ref = null; auto = null; drawOverlay();
   if (!getDetector()){
     setStatus('err', 'Détection des marqueurs indisponible', "Le module ArUco n'a pas pu se charger (connexion ?). Utilisez la calibration manuelle.",
@@ -853,19 +931,27 @@ function drawAuto(){
 }
 
 /* ---------- Modes ---------- */
+function enterCalibration(reason){ if (settings.calibMode === 'manuel') enterCalib(reason); else enterAuto(reason); }
+/* Calibration manuelle : l'aperçu prend tout l'écran, avec un cercle par socle, Annuler et Confirmer */
+let manualBack = null; // ce qu'Annuler rétablit (retour à la recherche des marqueurs ou à la calibration précédente)
 function enterCalib(reason){
+  const from = mode, prev = calib, base = (auto && auto.pending) || prev; // cercles de départ : résultat des marqueurs s'il y en a un
+  if (from === 'auto') manualBack = () => enterAuto();
+  else if (from === 'run' && prev) manualBack = () => { calib = prev; startRun(true); };
+  else if (from !== 'calib') manualBack = null;
   autoRun++; auto = null;
   unlockFocus();
   mode = 'calib'; state = 'idle'; ref = null;
-  const def = defaultCircles();
-  manual = calib && Math.abs(calib.aspect - W/H) <= 0.02 ? { dish:circleFromH(calib.dish.h), lid:circleFromH(calib.lid.h) } : def;
+  manual = base && Math.abs(base.aspect - W/H) <= 0.02 ? { dish:circleFromH(base.dish.h), lid:circleFromH(base.lid.h) } : defaultCircles();
+  document.body.classList.add('manual'); $('btnManCancel').disabled = !manualBack;
+  setStatus('idle', lidOn() ? 'Placez les deux cercles' : 'Placez le cercle de la boîte', (reason ? reason + ' ' : '') + 'Laissez le socle vide, puis confirmez.');
   drawOverlay();
-  setStatus('idle', lidOn() ? 'Placez les deux cercles' : 'Placez le cercle de la boîte',
-    (reason ? reason + ' ' : '') + (lidOn() ? "Faites glisser chaque cercle, la poignée à droite change sa taille." : "Faites glisser le cercle, la poignée à droite change sa taille.") + " Laissez le socle vide, puis validez.",
-    [{ label:'Valider (socle vide)', primary:true, fn: () => { applyManual(); startRun(false); } }, { label:'Calibration auto', fn: () => enterAuto() }]);
 }
+function leaveManual(){ document.body.classList.remove('manual'); }
+$('btnManOk').addEventListener('click', () => { if (mode !== 'calib') return; leaveManual(); manualBack = null; applyManual(); startRun(false); });
+$('btnManCancel').addEventListener('click', () => { if (mode !== 'calib' || !manualBack) return; const back = manualBack; manualBack = null; leaveManual(); back(); });
 async function startRun(silent){
-  autoRun++;
+  autoRun++; leaveManual();
   calib.aspect = W/H; store.set(calibKey(), calib);
   buildMasks(); mode = 'run';
   await takeReference();
@@ -1218,7 +1304,7 @@ function bindCheck(id, key, after){
 }
 bindCheck('cLid', 'requireLid', () => {
   if (calib && W){ buildMasks(); drawOverlay(); }
-  if (mode === 'calib') enterCalib();
+  if (mode === 'calib') drawOverlay();
   else if (mode === 'auto') enterAuto();
   else if (mode === 'run' && state === 'empty') setStatus('wait', 'Prêt', placeMsg(), runActions());
 }); bindCheck('cSharp', 'sharpCheck'); bindCheck('cLock', 'lockFocus', () => { if (!settings.lockFocus) unlockFocus(); }); bindCheck('cSound', 'sound');
@@ -1240,12 +1326,13 @@ $('btnLens').addEventListener('click', () => {
   useCamera(next.deviceId, next.label || ('Caméra ' + ((i + 1) % lenses.length + 1)));
 });
 $('btnRef').addEventListener('click', async () => { if (mode !== 'run') return; closeSheets(); await takeReference(); toEmpty(); toast('Fond vide mis à jour.'); });
-$('btnCalib2').addEventListener('click', () => { closeSheets(); if (stream) enterCalib(); });
-$('btnAuto2').addEventListener('click', () => { closeSheets(); if (stream) enterAuto(); });
+$('btnCalib2').addEventListener('click', () => { closeSheets(); if (stream) enterCalibration(); });
+const selCalib = $('selCalib'); selCalib.value = settings.calibMode;
+selCalib.addEventListener('change', () => { settings.calibMode = selCalib.value; store.set('petri.settings', settings); });
 
 /* ---------- En-tête ---------- */
 $('btnStart').addEventListener('click', () => { initAudio(); startCamera(); try{ navigator.storage && navigator.storage.persist && navigator.storage.persist(); }catch(e){} });
-$('btnCalib').addEventListener('click', () => { if (stream) enterAuto(); });
+$('btnCalib').addEventListener('click', () => { if (stream) enterCalibration(); });
 $('btnPhotos').addEventListener('click', () => { openSheet('sheetPhotos'); renderGrid(); });
 $('btnSettings').addEventListener('click', () => { openSheet('sheetSettings'); listCameras(); });
 $('btnFull').addEventListener('click', () => {
@@ -1266,6 +1353,8 @@ document.addEventListener('keydown', e => {
 });
 document.addEventListener('pointerdown', initAudio, { once:true });
 refreshCount();
+// installation comme application (Chrome : « Installer l'application ») et fonctionnement hors connexion
+if ('serviceWorker' in navigator && location.protocol !== 'file:') navigator.serviceWorker.register('sw.js').catch(() => {});
 })();
 </script>
 </body>
