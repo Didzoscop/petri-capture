@@ -456,13 +456,13 @@ body.manual .meters,body.manual .btn.lens{display:none}
 
 <div class="toast" id="toast" role="status"></div>
 
-<script src="mascot.js?v32"></script> <!-- ?vNN : à changer avec APP_VERSION, pour contourner le cache de GitHub Pages -->
-<script src="demo.js?v32"></script>
+<script src="mascot.js?v33"></script> <!-- ?vNN : à changer avec APP_VERSION, pour contourner le cache de GitHub Pages -->
+<script src="demo.js?v33"></script>
 <script>
 (() => {
 'use strict';
 const $ = id => document.getElementById(id);
-const APP_VERSION = 'v32 · 27/10'; // à incrémenter à chaque publication
+const APP_VERSION = 'v33 · 27/10'; // à incrémenter à chaque publication
 $('ver').textContent = APP_VERSION;
 
 /* ---------- Mascotte (dessin et animation dans mascot.js) ---------- */
@@ -520,7 +520,7 @@ const I18N = {
     baseDish:'Dish base', baseLid:'Lid base', dirs:['N', 'E', 'S', 'W'],
     errMissing: p => p.base + ': missing ' + p.list + '.', errAligned: p => p.base + ': markers in a line.',
     errMirror: p => p.base + ': markers swapped?', errSize: p => p.base + ': odd size.',
-    errRatio:'Bases differ in size: check the marker IDs.', need3:'Each base needs 3 markers.', noMarkers:'No markers found. Keep the base empty and well lit.',
+    errRatio:'Bases differ in size: check the marker IDs.', need3:'At least 3 markers are needed in total (on either base).', noMarkers:'No markers found. Keep the base empty and well lit.',
     partial: p => p.base + ': ' + p.n + '/4 markers.',
     calibSaved:'Calibration saved.', refocus:'Blurry: refocusing.', lockFail:'Focus lock failed, autofocus kept.',
     lockOk:'Focus locked.', bgUpdated:'Background updated.', lensT: p => 'Lens: ' + p.l, needCalib:' Calibration needed.',
@@ -581,7 +581,7 @@ const I18N = {
     baseDish:'Socle boîte', baseLid:'Socle couvercle', dirs:['N', 'E', 'S', 'O'],
     errMissing: p => p.base + ' : manque ' + p.list + '.', errAligned: p => p.base + ' : marqueurs alignés.',
     errMirror: p => p.base + ' : marqueurs inversés ?', errSize: p => p.base + ' : taille aberrante.',
-    errRatio:'Socles de tailles incohérentes : vérifiez les ID.', need3:'Il faut 3 marqueurs par socle.', noMarkers:'Aucun marqueur trouvé. Laissez le socle vide et bien éclairé.',
+    errRatio:'Socles de tailles incohérentes : vérifiez les ID.', need3:'Il faut au moins 3 marqueurs au total, sur l\'un ou l\'autre socle.', noMarkers:'Aucun marqueur trouvé. Laissez le socle vide et bien éclairé.',
     partial: p => p.base + ' : ' + p.n + '/4 marqueurs.',
     calibSaved:'Calibration enregistrée.', refocus:'Floue : nouvelle mise au point.', lockFail:'Verrouillage raté, autofocus conservé.',
     lockOk:'Mise au point verrouillée.', bgUpdated:'Fond vide mis à jour.', lensT: p => 'Objectif : ' + p.l, needCalib:' Calibration nécessaire.',
@@ -865,9 +865,16 @@ document.addEventListener('visibilitychange', () => { if (document.visibilitySta
    en millimètres (centre du cercle = origine, nord = +Y) vers l'image, en fractions de la largeur et de la hauteur.
    Calibration automatique : homographie (4 marqueurs) ou affine (3) ; manuelle : cercle = simple mise à l'échelle. */
 const SOCLE_R = 51.5;            // rayon du socle (103 mm)
+const ZONE_K = .9;               // zone de détection affichée et analysée : 90 % du socle, marge contre les petites déformations
 const MARK_D = 35.75;            // distance centre du socle → centre d'un marqueur
 const MARK_POS = [[0, MARK_D], [MARK_D, 0], [0, -MARK_D], [-MARK_D, 0]]; // ID % 4 : nord, est, sud, ouest
 const SOCLE_IDS = { dish:[0, 1, 2, 3], lid:[4, 5, 6, 7] };
+// Les deux socles sont solidaires : centre du couvercle dans les coordonnées du socle de la boîte (mm).
+// Valeur du support imprimé en 3D au départ (socles qui se touchent : 103 mm, mesuré sur une photo du support),
+// puis apprise à chaque calibration où les deux socles sont vus en entier (la feuille de test, elle, donne 119 mm).
+const LID_OFFSET_DEFAULT = [103, 0];
+const lidOffset = () => store.get('petri.lidOffset', LID_OFFSET_DEFAULT);
+const withOffset = (h, [dx, dy]) => [h[0], h[1], h[0]*dx + h[1]*dy + h[2], h[3], h[4], h[3]*dx + h[4]*dy + h[5], h[6], h[7], h[6]*dx + h[7]*dy + h[8]];
 const baseName = k => t(k === 'dish' ? 'baseDish' : 'baseLid');
 
 function project(h, X, Y){
@@ -924,9 +931,9 @@ function normCalib(){
   if (!calib.lid || !calib.lid.h) calib.lid = { h:circleToH(defaultCircles().lid) };
   if (!calib.dish || !calib.dish.h) calib = null;
 }
-// zone d'un socle en pixels de l'image : centre, contour projeté, rayon inscrit et encadrement
-function zonePx(h){
-  const s = SOCLE_R, c = project(h, 0, 0), pts = [];
+// zone d'un socle en pixels de l'image : centre, contour projeté (k : part du rayon du socle), rayon inscrit et encadrement
+function zonePx(h, k){
+  const s = SOCLE_R * (k || 1), c = project(h, 0, 0), pts = [];
   let rMin = Infinity, x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
   for (let i = 0; i < 64; i++){
     const t = i / 64 * 2 * Math.PI, p = project(h, s*Math.cos(t), s*Math.sin(t)), x = p.x*W, y = p.y*H;
@@ -953,8 +960,8 @@ function buildMasks(){
   for (let y = 0; y < ah; y++) for (let x = 0; x < aw; x++){
     const u = (x + .5) / aw, v = (y + .5) / ah, i = y*aw + x;
     const dd = dist(iD, u, v), dl = dist(iL, u, v);
-    if (dd < .92) d.push(i);
-    else if (lid && dl < .92) l.push(i);
+    if (dd < ZONE_K) d.push(i);
+    else if (lid && dl < ZONE_K) l.push(i);
     else if (dd > 1.2 && (!lid || dl > 1.2)) o.push(i);
   }
   idxDish = Int32Array.from(d); idxLid = Int32Array.from(l); idxOut = Int32Array.from(o);
@@ -968,7 +975,7 @@ function svgLabel(text, x, y, fill, fs){
   t.textContent = text; return t;
 }
 function drawZone(k, h, stroke, dashed){
-  const z = zonePx(h), fs = mn() * 0.045;
+  const z = zonePx(h, ZONE_K), fs = mn() * 0.045;
   svg.appendChild(el('polygon', { points:z.pts.map(p => p[0].toFixed(1) + ',' + p[1].toFixed(1)).join(' '), fill:'none', stroke,
     'stroke-width':3, 'stroke-dasharray': dashed ? '10 8' : 'none', 'vector-effect':'non-scaling-stroke', opacity:.95 }));
   svg.appendChild(svgLabel(t(k), z.cx, z.y0 - fs*0.4, stroke, fs));
@@ -1043,32 +1050,96 @@ function markerCenter(c){
   const t = ((p1.x - p0.x)*d2y - (p1.y - p0.y)*d2x) / den;
   return { x:p0.x + t*d1x, y:p0.y + t*d1y };
 }
-// détecte sur l'image courante ; renvoie { id: {x, y} } en fractions de l'image, pour les ID 0 à 7.
-// Le seuillage de js-aruco2 regarde une fenêtre de 5 pixels : un marqueur trop gros dans l'image (objectif rapproché,
-// haute résolution) et un peu flou n'est plus vu. On cherche donc aussi sur des versions réduites de l'image ;
-// pour chaque marqueur, on garde la position trouvée à la plus grande taille (la plus précise).
-const DETECT_WIDTHS = [1600, 1100, 760, 520];
+// Détection des marqueurs 0 à 7 ; renvoie { id: {x, y} } en fractions de l'image.
+// js-aruco2 sert à trouver les quadrilatères candidats (seuillage, contours) ; la lecture des cases est faite ici,
+// car celle de js-aruco2 rejette trop souvent des marqueurs bien visibles quand une case ne fait que 4 à 5 pixels
+// (essai sur une vraie photo des socles : 4 à 6 marqueurs sur 8 lus par js-aruco2, 7 à 8 avec cette lecture).
+// Codes DICT_4X4_50 des marqueurs 0 à 7 (cases intérieures ligne par ligne, 1 = blanc), comme tools/make-test-sheet.js
+const MARKER_CODES = [[181,50],[15,154],[51,45],[153,70],[84,158],[121,205],[158,46],[196,242]].map(([a, b]) => (a << 8) | b);
+const popcount = v => { let c = 0; while (v){ c += v & 1; v >>>= 1; } return c; };
+const rot90 = b => { let r = 0; for (let y = 0; y < 4; y++) for (let x = 0; x < 4; x++) if ((b >> (15 - (y*4 + x))) & 1) r |= 1 << (15 - (x*4 + 3 - y)); return r; };
+function squareToQuad(q){ // carré unité → quadrilatère (transformation projective, méthode de Heckbert)
+  const [p0, p1, p2, p3] = q, dx1 = p1.x - p2.x, dx2 = p3.x - p2.x, dy1 = p1.y - p2.y, dy2 = p3.y - p2.y;
+  const sx = p0.x - p1.x + p2.x - p3.x, sy = p0.y - p1.y + p2.y - p3.y;
+  let g = 0, h = 0;
+  if (Math.abs(sx) > 1e-9 || Math.abs(sy) > 1e-9){ const den = dx1*dy2 - dx2*dy1; g = (sx*dy2 - dx2*sy) / den; h = (dx1*sy - sx*dy1) / den; }
+  const a = p1.x - p0.x + g*p1.x, b = p3.x - p0.x + h*p3.x, d = p1.y - p0.y + g*p1.y, e = p3.y - p0.y + h*p3.y;
+  return (u, v) => { const w = g*u + h*v + 1; return { x:(a*u + b*v + p0.x) / w, y:(d*u + e*v + p0.y) / w }; };
+}
+function greyAt(g, x, y){ // interpolation bilinéaire dans l'image en niveaux de gris de js-aruco2
+  const x0 = Math.floor(x), y0 = Math.floor(y);
+  if (x0 < 0 || y0 < 0 || x0 >= g.width - 1 || y0 >= g.height - 1) return 128;
+  const fx = x - x0, fy = y - y0, D = g.data, i = y0*g.width + x0;
+  return D[i]*(1 - fx)*(1 - fy) + D[i+1]*fx*(1 - fy) + D[i+g.width]*(1 - fx)*fy + D[i+g.width+1]*fx*fy;
+}
+// lit la grille 6 × 6 d'un candidat : bord noir (2 erreurs tolérées), code à 1 erreur près, dans les 4 orientations
+function decodeMarker(g, q){
+  const M = squareToQuad(q), vals = [];
+  for (let r = 0; r < 6; r++) for (let c = 0; c < 6; c++){
+    let s = 0;
+    for (const oy of [.35, .5, .65]) for (const ox of [.35, .5, .65]){ const p = M((c + ox) / 6, (r + oy) / 6); s += greyAt(g, p.x, p.y); }
+    vals.push(s / 9);
+  }
+  const sorted = vals.slice().sort((a, b) => a - b);
+  if (sorted[35] - sorted[0] < 30) return -1; // pas assez de contraste
+  let best = -1, thr = 0; // seuil d'Otsu sur les 36 cases
+  for (let i = 1; i < 36; i++){
+    let ma = 0, mb = 0; for (let j = 0; j < i; j++) ma += sorted[j]; for (let j = i; j < 36; j++) mb += sorted[j];
+    ma /= i; mb /= 36 - i; const v = i*(36 - i)*(ma - mb)*(ma - mb);
+    if (v > best){ best = v; thr = (sorted[i-1] + sorted[i]) / 2; }
+  }
+  let border = 0, bits = 0;
+  for (let r = 0; r < 6; r++) for (let c = 0; c < 6; c++){
+    const white = vals[r*6 + c] > thr;
+    if (r === 0 || r === 5 || c === 0 || c === 5){ if (!white) border++; }
+    else if (white) bits |= 1 << (15 - ((r - 1)*4 + (c - 1)));
+  }
+  if (border < 18) return -1;
+  let id = -1, dist = 99;
+  for (let k = 0; k < 4; k++){ MARKER_CODES.forEach((code, i) => { const dd = popcount(code ^ bits); if (dd < dist){ dist = dd; id = i; } }); bits = rot90(bits); }
+  return dist <= 1 ? id : -1;
+}
+// une passe sur la zone (rx, ry, rw, rh) de l'image, rendue sur w pixels de large, seuillage sur une fenêtre de 2k+1 pixels
+function detectRegion(src, sw, sh, rx, ry, rw, rh, w, k, out){
+  const h = Math.round(w * rh / rw), d = getDetector();
+  dcv.width = w; dcv.height = h; dctx.drawImage(src, rx, ry, rw, rh, 0, 0, w, h);
+  CV.grayscale(dctx.getImageData(0, 0, w, h), d.grey);
+  CV.adaptiveThreshold(d.grey, d.thres, k, 7);
+  let cand = d.findCandidates(CV.findContours(d.thres, d.binary), w*0.01, 0.05, 10);
+  cand = d.notTooNear(d.clockwiseCorners(cand), 10);
+  cand.forEach(q => {
+    const id = decodeMarker(d.grey, q);
+    if (id < 0 || out[id]) return;
+    const c = markerCenter(q); out[id] = { x:(rx + c.x / w * rw) / sw, y:(ry + c.y / h * rh) / sh };
+  });
+}
+// plusieurs passes (tailles d'image et seuillages différents), arrêt dès que tous les marqueurs utiles sont lus
+const DETECT_PASSES = [[2000, 3], [1400, 3], [2000, 2], [1000, 3]];
 function detectMarkers(src, sw, sh){
-  const out = {};
-  for (const maxW of DETECT_WIDTHS){
-    const s = Math.min(1, maxW / sw), w = Math.round(sw*s), h = Math.round(sh*s);
-    if (maxW !== DETECT_WIDTHS[0] && w >= sw) continue; // image déjà plus petite que cette taille : rien de nouveau à voir
-    dcv.width = w; dcv.height = h; dctx.drawImage(src, 0, 0, w, h);
-    getDetector().detect(dctx.getImageData(0, 0, w, h)).forEach(m => {
-      if (m.id < 0 || m.id > 7 || out[m.id]) return;
-      const c = markerCenter(m.corners); out[m.id] = { x:c.x / w, y:c.y / h };
-    });
-    if (Object.keys(out).length >= 8) break;
+  const out = {}, done = () => Object.keys(out).length >= (lidOn() ? 8 : 4), tried = {};
+  for (const [maxW, k] of DETECT_PASSES){
+    const w = Math.round(sw * Math.min(1, maxW / sw));
+    if (tried[w + '/' + k]) continue; tried[w + '/' + k] = 1;
+    detectRegion(src, sw, sh, 0, 0, sw, sh, w, k, out);
+    if (done()) return out;
+  }
+  // marqueurs minuscules (téléphone très loin) : zoom numérique ×2, l'image parcourue par 9 fenêtres qui se chevauchent
+  if (Object.keys(out).length < 3){
+    const tw = sw / 2, th = sh / 2;
+    for (const fy of [.5, 0, 1]) for (const fx of [.5, 0, 1]){
+      detectRegion(src, sw, sh, fx * (sw - tw), fy * (sh - th), tw, th, Math.round(Math.min(1600, tw * 2)), 3, out);
+      if (done()) return out;
+    }
   }
   return out;
 }
 const median = a => { const s = a.slice().sort((x, y) => x - y), n = s.length; return n % 2 ? s[(n-1)/2] : (s[n/2-1] + s[n/2]) / 2; };
-// calcule la transformation d'un socle à partir des marqueurs trouvés
-function fitSocle(k, found){
+// calcule la transformation d'un socle à partir des marqueurs trouvés (ou la vérifie, si elle est déduite de l'autre socle : given)
+function fitSocle(k, found, given){
   const ids = SOCLE_IDS[k], have = ids.filter(id => found[id]), missing = ids.filter(id => !found[id]);
   const names = list => list.map(id => id + ' (' + t('dirs')[id % 4] + ')').join(', ');
-  if (have.length < 3) return { k, missing, few:true, error: () => t('errMissing', { base:baseName(k), list:names(missing) }) };
-  const h = fitTransform(have.map(id => ({ X:MARK_POS[id % 4][0], Y:MARK_POS[id % 4][1], x:found[id].x, y:found[id].y })));
+  if (!given && have.length < 3) return { k, missing, few:true, error: () => t('errMissing', { base:baseName(k), list:names(missing) }) };
+  const h = given || fitTransform(have.map(id => ({ X:MARK_POS[id % 4][0], Y:MARK_POS[id % 4][1], x:found[id].x, y:found[id].y })));
   if (!h) return { k, missing, error: () => t('errAligned', { base:baseName(k) }) };
   // contrôle : pas d'image inversée ni repliée sur toute la surface du socle
   for (let i = 0; i <= 16; i++){
@@ -1078,7 +1149,45 @@ function fitSocle(k, found){
   }
   const area = Math.abs(localDet(h, 0, 0)) * Math.PI * SOCLE_R * SOCLE_R / (W*H);
   if (area < .005 || area > .9) return { k, missing, error: () => t('errSize', { base:baseName(k) }) };
-  return { k, h, have, missing, kind: have.length >= 4 ? 'homographie' : 'affine', scale: Math.sqrt(Math.abs(localDet(h, 0, 0))) };
+  return { k, h, have, missing, kind: given ? 'déduit' : have.length >= 4 ? 'homographie' : 'affine', scale: Math.sqrt(Math.abs(localDet(h, 0, 0))) };
+}
+// homographie aux moindres carrés sur tous les points (4 ou plus)
+function fitHomographyLS(pts){
+  const N = Array.from({ length:8 }, () => new Array(8).fill(0)), v = new Array(8).fill(0);
+  pts.forEach(p => [[[p.X, p.Y, 1, 0, 0, 0, -p.x*p.X, -p.x*p.Y], p.x], [[0, 0, 0, p.X, p.Y, 1, -p.y*p.X, -p.y*p.Y], p.y]].forEach(([a, b]) => {
+    for (let i = 0; i < 8; i++){ v[i] += a[i]*b; for (let j = 0; j < 8; j++) N[i][j] += a[i]*a[j]; }
+  }));
+  const s = solve(N, v); return s && s.concat(1);
+}
+const mul3 = (A, B) => [0, 1, 2].flatMap(i => [0, 1, 2].map(j => A[i*3]*B[j] + A[i*3+1]*B[3+j] + A[i*3+2]*B[6+j]));
+// Socle à qui il manque des marqueurs : on part d'une estimation (base : perspective du socle voisin vu en entier,
+// ou ajustement sur les deux socles ensemble), puis on la recale avec ce que l'on a vu de ce socle :
+// 3 marqueurs → correction affine, 2 → similitude, 1 → décalage, 0 → l'estimation telle quelle.
+// Essai sur une photo réelle (vue en biais) : ~2 px d'erreur sur le marqueur caché, contre ~12 px avec 3 marqueurs seuls.
+function refineSocle(base, k, found){
+  const ids = SOCLE_IDS[k].filter(id => found[id]);
+  if (!ids.length) return base;
+  const bi = invert3(base);
+  const loc = ids.map(id => { const q = project(bi, found[id].x, found[id].y); return { X:MARK_POS[id % 4][0], Y:MARK_POS[id % 4][1], x:q.x, y:q.y }; });
+  let S;
+  if (loc.length >= 3) S = fitTransform(loc.slice(0, 3));
+  else if (loc.length === 2){ // similitude z' = a·z + b (nombres complexes)
+    const [p, q] = loc, zx = p.X - q.X, zy = p.Y - q.Y, wx = p.x - q.x, wy = p.y - q.y, n = zx*zx + zy*zy;
+    const ar = (wx*zx + wy*zy) / n, ai = (wy*zx - wx*zy) / n;
+    S = [ar, -ai, p.x - (ar*p.X - ai*p.Y), ai, ar, p.y - (ai*p.X + ar*p.Y), 0, 0, 1];
+  } else S = [1, 0, loc[0].x - loc[0].X, 0, 1, loc[0].y - loc[0].Y, 0, 0, 1];
+  return S ? mul3(base, S) : base;
+}
+// les deux socles ensemble : 3 marqueurs au total suffisent, où qu'ils soient (affine), 4 ou plus donnent une homographie
+function fitJoint(found){
+  const off = lidOffset(), pts = [];
+  for (let id = 0; id < 8; id++) if (found[id]){
+    const [X, Y] = MARK_POS[id % 4], lid = id >= 4;
+    pts.push({ X:X + (lid ? off[0] : 0), Y:Y + (lid ? off[1] : 0), x:found[id].x, y:found[id].y });
+  }
+  if (pts.length < 3) return null;
+  const h = pts.length >= 4 ? fitHomographyLS(pts) : fitTransform(pts);
+  return h && { dish:h, lid:withOffset(h, off) };
 }
 async function enterAuto(reason){
   const run = ++autoRun;
@@ -1104,7 +1213,28 @@ async function enterAuto(reason){
   }
   const found = {};
   for (const id in seen) if (seen[id].length >= 2) found[id] = { x:median(seen[id].map(p => p.x)), y:median(seen[id].map(p => p.y)) };
-  const fits = circleKeys().map(k => fitSocle(k, found));
+  let fits = circleKeys().map(k => fitSocle(k, found));
+  if (fits.length === 2 && !fits[0].error && !fits[1].error && fits[0].have.length === 4 && fits[1].have.length === 4){
+    // les deux socles vus en entier : on retient l'écart entre leurs centres pour les fois suivantes
+    const c = project(fits[1].h, 0, 0), o = project(invert3(fits[0].h), c.x, c.y), d = Math.hypot(o.x, o.y);
+    if (d > 2*SOCLE_R && d < 4*SOCLE_R) store.set('petri.lidOffset', [o.x, o.y]);
+  }
+  // Un socle avec ses 4 marqueurs garde sa propre homographie. Seuls ceux à qui il en manque sont complétés,
+  // en se servant de tout ce qui a été vu : perspective du socle voisin s'il est complet, sinon des deux socles ensemble.
+  const own = k => SOCLE_IDS[k].filter(id => found[id]).length;
+  if (fits.some(f => own(f.k) < 4)){
+    const off = lidOffset(), full = {};
+    ['dish','lid'].forEach(k => { if (own(k) === 4){ const f = fitSocle(k, found); if (!f.error) full[k] = f.h; } });
+    const j = fitJoint(found);
+    fits = fits.map(f => {
+      if (own(f.k) >= 4) return f;
+      const o = f.k === 'dish' ? 'lid' : 'dish';
+      const base = full[o] ? withOffset(full[o], o === 'dish' ? off : [-off[0], -off[1]]) : j && j[f.k];
+      if (!base) return f; // pas assez de marqueurs en tout : l'erreur « il en faut 3 » reste
+      const g = fitSocle(f.k, found, refineSocle(base, f.k, found));
+      return g.error && !f.error ? f : g; // si le résultat échoue aux contrôles, on garde celui du socle seul
+    });
+  }
   if (fits.length === 2 && !fits[0].error && !fits[1].error){
     const ratio = fits[0].scale / fits[1].scale;
     if (ratio < .6 || ratio > 1.65) fits[1].error = T('errRatio');
