@@ -138,20 +138,20 @@ svg#overlay{position:absolute;inset:0;width:100%;height:100%;touch-action:none}
 /* Panneaux latéraux */
 .sheet{
   position:fixed;top:0;right:0;bottom:0;width:min(440px,100%);background:var(--paper);
-  border-left:var(--b) solid var(--ink);z-index:20;display:flex;flex-direction:column;
+  border-left:5px solid var(--ink);z-index:20;display:flex;flex-direction:column;
   transform:translateX(105%);transition:transform .25s steps(5);
   padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);
 }
 .sheet.open{transform:none}
 @media (prefers-reduced-motion: reduce){.sheet{transition:none}}
-.sheet-head{display:flex;align-items:center;gap:.5rem;padding:.6rem 1rem;border-bottom:var(--b) solid var(--ink)}
+.sheet-head{display:flex;align-items:center;gap:.5rem;padding:.6rem 1rem;border-bottom:5px solid var(--ink)}
 .sheet-head h2{margin:0 auto 0 0;font-size:1.2rem;text-transform:uppercase;letter-spacing:.06em}
 .sheet-body{overflow:auto;padding:1rem;flex:1}
 /* Réglages : le quart droit reste vide (séparé par des pointillés) pour faire défiler au pouce sans toucher un curseur */
 #sheetSettings .sheet-body{padding-right:calc(25% + 1rem);
   background:repeating-linear-gradient(to bottom,var(--ink) 0 9px,transparent 9px 18px) no-repeat local;
   background-size:5px 100%;background-position:75% 0}
-.sheet-foot{padding:.75rem 1rem;border-top:var(--b) solid var(--ink);display:flex;gap:.6rem;flex-wrap:wrap}
+.sheet-foot{padding:.75rem 1rem;border-top:5px solid var(--ink);display:flex;gap:.6rem;flex-wrap:wrap}
 .scrim{position:fixed;inset:0;background:rgba(26,26,26,.35);z-index:15;display:none}
 .scrim.open{display:block}
 
@@ -372,7 +372,7 @@ body.manual .meters,body.manual .btn.lens{display:none}
 (() => {
 'use strict';
 const $ = id => document.getElementById(id);
-const APP_VERSION = 'v15 · 26/10'; // à incrémenter à chaque publication
+const APP_VERSION = 'v16 · 26/10'; // à incrémenter à chaque publication
 $('ver').textContent = APP_VERSION;
 
 /* ---------- Mascotte (dessin et animation dans mascot.js) ---------- */
