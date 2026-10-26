@@ -65,6 +65,7 @@ button{cursor:pointer}
   box-shadow:var(--b) var(--b) 0 var(--ink);font-weight:600;
 }
 .btn:active:not([disabled]){transform:translate(var(--b),var(--b));box-shadow:none}
+a.btn{color:inherit;text-decoration:none}
 .btn.primary{background:var(--ink);color:var(--paper)}
 .btn.danger{color:var(--err);border-color:var(--err);box-shadow:var(--b) var(--b) 0 var(--err)}
 .btn[disabled]{opacity:.4;cursor:default}
@@ -382,7 +383,9 @@ body.manual .meters,body.manual .btn.lens{display:none}
       </select>
       <p data-i18n="selCalibHelp"></p>
     </div>
-    <div class="row"><button class="btn" id="btnCalib2" type="button" data-i18n="calibNow"></button></div>
+    <div class="row"><button class="btn" id="btnCalib2" type="button" data-i18n="calibNow"></button>
+      <a class="btn" href="test-sheet.pdf" download="petri-capture-test-sheet.pdf" data-i18n="testSheet"></a></div>
+    <p class="note" data-i18n="testSheetHelp"></p>
 
     <div class="group-title" data-gicon="mail"><span data-i18n="grpExport"></span></div>
     <div class="field">
@@ -457,7 +460,7 @@ body.manual .meters,body.manual .btn.lens{display:none}
 (() => {
 'use strict';
 const $ = id => document.getElementById(id);
-const APP_VERSION = 'v27 · 27/10'; // à incrémenter à chaque publication
+const APP_VERSION = 'v28 · 27/10'; // à incrémenter à chaque publication
 $('ver').textContent = APP_VERSION;
 
 /* ---------- Mascotte (dessin et animation dans mascot.js) ---------- */
@@ -493,7 +496,7 @@ const I18N = {
     tOk:'Test success sound', tErr:'Test error sound', grpCamera:'Camera', btnRef:'Retake empty background',
     grpCalib:'Calibration', selCalib:'Calibration mode', optAruco:'Automatic: ArUco markers', optManual:'Manual: place circles',
     selCalibHelp:'Used by Calibrate and at start. In automatic mode, manual stays available if markers are not found.',
-    calibNow:'Calibrate now',
+    calibNow:'Calibrate now', testSheet:'Test sheet (PDF)', testSheetHelp:'Print at 100 % to check marker detection without the real base.',
     startTitle:'Snap Petri dishes hands-free', startIntro:'Mount the device, back camera facing the base.',
     step1:'Keep the base empty: the app finds the markers and places the circles.', step2:'Check the circles, then save.',
     step3:'Place each dish: the photo is taken automatically.', start:'Start camera', demo:'Try without a camera', demoHint:'Demo: click the image to place or remove a dish.', rotate:'Turn the device to landscape.',
@@ -554,7 +557,7 @@ const I18N = {
     tOk:'Tester le son de réussite', tErr:"Tester le son d'erreur", grpCamera:'Caméra', btnRef:'Reprendre le fond vide',
     grpCalib:'Calibration', selCalib:'Mode de calibration', optAruco:'Automatique : marqueurs ArUco', optManual:'Manuel : cercles à placer',
     selCalibHelp:'Utilisé par « Calibrer » et au démarrage. En automatique, le mode manuel reste proposé si les marqueurs ne sont pas trouvés.',
-    calibNow:'Calibrer maintenant',
+    calibNow:'Calibrer maintenant', testSheet:'Feuille de test (PDF)', testSheetHelp:'À imprimer à 100 % pour vérifier la détection des marqueurs sans le vrai socle.',
     startTitle:"Photographiez les boîtes sans toucher l'écran", startIntro:"Fixez l'appareil, caméra arrière vers le socle.",
     step1:"Laissez le socle vide : l'app repère les marqueurs et place les cercles.", step2:'Vérifiez les cercles, puis enregistrez.',
     step3:'Posez chaque boîte : la photo part toute seule.', start:'Démarrer la caméra', demo:'Essayer sans caméra', demoHint:"Démo : cliquez sur l'image pour poser ou retirer une boîte.", rotate:"Tournez l'appareil en paysage.",
