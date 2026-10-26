@@ -374,7 +374,8 @@ body.manual .meters,body.manual .btn.lens{display:none}
       <select id="selRes"></select>
       <p data-i18n="resHelp"></p>
     </div>
-    <div class="row"><button class="btn" id="btnRef" type="button" data-i18n="btnRef"></button></div>
+    <div class="row"><button class="btn" id="btnRef" type="button" data-i18n="btnRef"></button>
+      <button class="btn" id="btnReset" type="button" data-i18n="btnReset"></button></div>
 
     <div class="group-title" data-gicon="calib"><span data-i18n="grpCalib"></span></div>
     <div class="field">
@@ -456,13 +457,13 @@ body.manual .meters,body.manual .btn.lens{display:none}
 
 <div class="toast" id="toast" role="status"></div>
 
-<script src="mascot.js?v33"></script> <!-- ?vNN : à changer avec APP_VERSION, pour contourner le cache de GitHub Pages -->
-<script src="demo.js?v33"></script>
+<script src="mascot.js?v34"></script> <!-- ?vNN : à changer avec APP_VERSION, pour contourner le cache de GitHub Pages -->
+<script src="demo.js?v34"></script>
 <script>
 (() => {
 'use strict';
 const $ = id => document.getElementById(id);
-const APP_VERSION = 'v33 · 27/10'; // à incrémenter à chaque publication
+const APP_VERSION = 'v34 · 27/10'; // à incrémenter à chaque publication
 $('ver').textContent = APP_VERSION;
 
 /* ---------- Mascotte (dessin et animation dans mascot.js) ---------- */
@@ -497,7 +498,7 @@ const I18N = {
     sFocus:'Focus time', sFocusHelp:'The sharpest frame in this time is kept.',
     grpChecks:'Checks', cLid:'Lid base: circle and lid detection', cSharp:'Reject blurry images',
     cLock:'Lock focus after the first photo (faster)', cMeters:'Show meters', cSound:'Sounds',
-    tOk:'Test success sound', tErr:'Test error sound', grpCamera:'Camera', btnRef:'Retake empty background',
+    tOk:'Test success sound', tErr:'Test error sound', grpCamera:'Camera', btnRef:'Retake empty background', btnReset:'Restore default settings', resetQ:'Restore the default detection settings? Calibration, camera, language and e-mail are kept.',
     grpCalib:'Calibration', selCalib:'Calibration mode', optAruco:'Automatic: ArUco markers', optManual:'Manual: place circles',
     selCalibHelp:'Used by Calibrate and at start. In automatic mode, manual stays available if markers are not found.',
     calibNow:'Calibrate now', testSheet:'Test sheet (PDF)', testSheetHelp:'Print at 100 % to check marker detection without the real base.',
@@ -523,7 +524,7 @@ const I18N = {
     errRatio:'Bases differ in size: check the marker IDs.', need3:'At least 3 markers are needed in total (on either base).', noMarkers:'No markers found. Keep the base empty and well lit.',
     partial: p => p.base + ': ' + p.n + '/4 markers.',
     calibSaved:'Calibration saved.', refocus:'Blurry: refocusing.', lockFail:'Focus lock failed, autofocus kept.',
-    lockOk:'Focus locked.', bgUpdated:'Background updated.', lensT: p => 'Lens: ' + p.l, needCalib:' Calibration needed.',
+    lockOk:'Focus locked.', bgUpdated:'Background updated.', bgAuto:'Background re-measured automatically.', lensT: p => 'Lens: ' + p.l, needCalib:' Calibration needed.',
     shared: p => plural(p.n, 'photo', 'photos') + ' sent.', shareFail: p => 'Sharing failed: ' + p.e,
     shareNA:'Gallery sharing is not available here. Use the .zip.', zipNA:'The .zip module did not load (offline?).',
     zipReady: p => 'Archive ready: ' + p.f, exportFail: p => 'Export failed: ' + p.e, noFullscreen:'Full screen is not available here.',
@@ -558,7 +559,7 @@ const I18N = {
     sFocus:'Durée de mise au point', sFocusHelp:"L'app garde l'image la plus nette sur cette durée.",
     grpChecks:'Contrôles', cLid:'Socle du couvercle : cercle et détection du couvercle', cSharp:'Refuser les images floues',
     cLock:'Verrouiller la mise au point après la première photo (plus rapide)', cMeters:'Afficher les mesures', cSound:'Sons',
-    tOk:'Tester le son de réussite', tErr:"Tester le son d'erreur", grpCamera:'Caméra', btnRef:'Reprendre le fond vide',
+    tOk:'Tester le son de réussite', tErr:"Tester le son d'erreur", grpCamera:'Caméra', btnRef:'Reprendre le fond vide', btnReset:'Rétablir les réglages par défaut', resetQ:'Rétablir les réglages de détection par défaut ? La calibration, la caméra, la langue et l\'e-mail sont conservés.',
     grpCalib:'Calibration', selCalib:'Mode de calibration', optAruco:'Automatique : marqueurs ArUco', optManual:'Manuel : cercles à placer',
     selCalibHelp:'Utilisé par « Calibrer » et au démarrage. En automatique, le mode manuel reste proposé si les marqueurs ne sont pas trouvés.',
     calibNow:'Calibrer maintenant', testSheet:'Feuille de test (PDF)', testSheetHelp:'À imprimer à 100 % pour vérifier la détection des marqueurs sans le vrai socle.',
@@ -584,7 +585,7 @@ const I18N = {
     errRatio:'Socles de tailles incohérentes : vérifiez les ID.', need3:'Il faut au moins 3 marqueurs au total, sur l\'un ou l\'autre socle.', noMarkers:'Aucun marqueur trouvé. Laissez le socle vide et bien éclairé.',
     partial: p => p.base + ' : ' + p.n + '/4 marqueurs.',
     calibSaved:'Calibration enregistrée.', refocus:'Floue : nouvelle mise au point.', lockFail:'Verrouillage raté, autofocus conservé.',
-    lockOk:'Mise au point verrouillée.', bgUpdated:'Fond vide mis à jour.', lensT: p => 'Objectif : ' + p.l, needCalib:' Calibration nécessaire.',
+    lockOk:'Mise au point verrouillée.', bgUpdated:'Fond vide mis à jour.', bgAuto:'Fond vide repris automatiquement.', lensT: p => 'Objectif : ' + p.l, needCalib:' Calibration nécessaire.',
     shared: p => plural(p.n, 'photo envoyée', 'photos envoyées') + '.', shareFail: p => 'Partage impossible : ' + p.e,
     shareNA:"Le partage vers la galerie n'est pas disponible ici. Utilisez le .zip.", zipNA:"Le module .zip n'a pas chargé (connexion ?).",
     zipReady: p => 'Archive prête : ' + p.f, exportFail: p => 'Export impossible : ' + p.e, noFullscreen:"Plein écran indisponible sur cet appareil.",
@@ -636,7 +637,7 @@ let stream = null, track = null, W = 0, H = 0;
 let mode = 'start'; // start | auto (calibration ArUco) | calib (manuelle) | run
 let state = 'idle'; // idle | empty | settling | focusing | saving | wait_removal
 let tSince = 0, tFocus = 0, tEmptySince = 0, bestSharp = 0, lastMsg = null;
-let ref = null, prevL = null, refPending = false;
+let ref = null, prevL = null, refPending = false, tStale = 0, tHeal = 0;
 let focusLocked = false, lockSharp = 0, verifyN = 0, verifyMax = 0, lockVerify = false, refreshRef = false, focusDur = 0;
 let snap = null, tSwap = 0;
 let tRetry = 0, failStreak = 0; // nouvel essai automatique après un échec // image de la boîte photographiée, pour repérer son remplacement
@@ -1307,6 +1308,17 @@ async function takeReference(){
   refPending = true;
   setStatus('busy', T('bgMeasure'), T('keepEmpty'));
   const n = aw*ah, acc = new Float32Array(n*3); const frames = 5;
+  // au démarrage, les premières images d'un téléphone sont noires ou sombres le temps que l'exposition se règle :
+  // on attend une image assez claire et stable 3 fois de suite (3 s au plus) avant de mesurer le fond vide
+  let prev = null, calm = 0;
+  for (let tries = 0; tries < 30 && calm < 3; tries++){
+    actx.drawImage(video, 0, 0, aw, ah);
+    const d = actx.getImageData(0, 0, aw, ah).data;
+    let sum = 0, diff = 0; const L = new Float32Array(n);
+    for (let i = 0; i < n; i++){ L[i] = d[i*4]*.3 + d[i*4+1]*.59 + d[i*4+2]*.11; sum += L[i]; if (prev) diff += Math.abs(L[i] - prev[i]); }
+    calm = sum / n > 20 && prev && diff / n < 2 ? calm + 1 : 0; prev = L;
+    if (calm < 3) await new Promise(r => setTimeout(r, 100));
+  }
   for (let f = 0; f < frames; f++){
     actx.drawImage(video, 0, 0, aw, ah);
     const d = actx.getImageData(0, 0, aw, ah).data;
@@ -1337,12 +1349,12 @@ function analyse(){
     }
     return c / idx.length;
   };
-  const fDish = frac(idxDish), fLid = frac(idxLid);
+  const fDish = frac(idxDish), fLid = frac(idxLid), fOut = frac(idxOut);
   let motion = 0;
   const L = new Float32Array(n);
   for (let i = 0; i < n; i++){ L[i] = (d[i*4]*.3 + d[i*4+1]*.59 + d[i*4+2]*.11); if (prevL) motion += Math.abs(L[i] - prevL[i]); }
   motion = prevL ? motion / n : 0; prevL = L;
-  return { d, fDish, fLid, motion };
+  return { d, fDish, fLid, fOut, motion };
 }
 
 function dishPixels(d){
@@ -1400,6 +1412,17 @@ function loop(){
   loopTimer = setTimeout(loop, 120);
   if (mode !== 'run' || !ref || refPending || !video.videoWidth || state === 'saving') return;
   const a = analyse(), now = performance.now(), P = settings.presence / 100;
+  // Fond de référence faux (image sombre au démarrage, lumière très différente…) : tout l'extérieur des socles a changé.
+  // On ne reprend le fond que si les marqueurs du socle de la boîte sont visibles, c.-à-d. si aucune boîte n'est posée.
+  const stale = a.fOut > .5; // aucune prise de vue tant que c'est le cas
+  if (!stale || a.motion >= MOTION_T || state === 'focusing') tStale = 0; // la reprise attend une image immobile
+  else if (!tStale) tStale = now;
+  else if (now - tStale > 1500 && now - tHeal > 2500){
+    tHeal = now;
+    let seen = 0;
+    try{ const f = detectMarkers(video, W, H); seen = SOCLE_IDS.dish.filter(id => f[id]).length; }catch(e){}
+    if (seen >= 3){ tStale = 0; takeReference().then(() => { toEmpty(); toast(t('bgAuto')); }); return; }
+  }
   if (settings.meters){
     $('mDish').textContent = Math.round(a.fDish*100) + ' %';
     $('mLid').textContent = lidOn() ? Math.round(a.fLid*100) + ' %' : '–';
@@ -1407,7 +1430,8 @@ function loop(){
   }
   switch (state){
     case 'empty':
-      if (a.fDish > P){ state = 'settling'; tSince = now; sounds.tick(); drawOverlay();
+      // (fond faux : pas de prise de vue tant qu'il n'est pas repris)
+      if (a.fDish > P && !stale){ state = 'settling'; tSince = now; sounds.tick(); drawOverlay();
         setStatus('busy', T('detected'), T('holdStill'), runActions()); }
       else if (a.fDish < P*.3 && a.motion < 1.2){
         // adaptation lente aux variations de lumière
@@ -1415,7 +1439,7 @@ function loop(){
       }
       break;
     case 'settling':
-      if (a.fDish < P*.5){ toEmpty(); break; }
+      if (a.fDish < P*.5 || stale){ toEmpty(); break; }
       if (a.motion > MOTION_T) tSince = now;
       if (now - tSince >= settings.stableMs) beginFocus(now);
       break;
@@ -1427,6 +1451,7 @@ function loop(){
         if (s > bestSharp){ bestSharp = s; grabBest(); }
       }
       if (now - tFocus >= focusDur){
+        if (stale){ toEmpty(); break; } // le fond de référence est faux : pas de photo d'un socle peut-être vide
         if (bestSharp < 0){ // aucune image immobile : on attend encore un peu
           if (now - tFocus >= focusDur + 1500) fail(T('failMoved'), T('failMovedD'));
           break;
@@ -1805,6 +1830,13 @@ $('btnLens').addEventListener('click', () => {
   useCamera(next.id, next.label, next.z);
 });
 $('btnRef').addEventListener('click', async () => { if (mode !== 'run') return; closeSheets(); await takeReference(); toEmpty(); toast(t('bgUpdated')); });
+// réglages par défaut, sauf ce qui est propre à l'appareil ou à l'utilisateur ; la page est rechargée pour tout réafficher
+$('btnReset').addEventListener('click', () => {
+  if (!confirm(t('resetQ'))) return;
+  const keep = {}; ['deviceId', 'zoom', 'lang', 'email', 'calibMode', 'resolution'].forEach(k => keep[k] = settings[k]);
+  store.set('petri.settings', Object.assign({}, DEFAULTS, keep));
+  location.reload();
+});
 $('btnCalib2').addEventListener('click', () => { closeSheets(); if (stream) enterCalibration(); });
 const selCalib = $('selCalib'); selCalib.value = settings.calibMode;
 selCalib.addEventListener('change', () => { settings.calibMode = selCalib.value; store.set('petri.settings', settings); });
