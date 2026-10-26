@@ -1,8 +1,8 @@
 // Service worker : rend l'app installable et utilisable hors connexion.
 // La page est cherchée d'abord sur le réseau (mises à jour immédiates), sinon dans le cache ;
 // les bibliothèques et polices (adresses versionnées) sont servies depuis le cache.
-const CACHE = 'petri-capture-v6';
-const SHELL = ['./', './index.html', './manifest.webmanifest', './icons/icon-192.png', './icons/icon-512.png', './fonts/ByteBounce.ttf', './mascot.js'];
+const CACHE = 'petri-capture-v7';
+const SHELL = ['./', './index.html', './manifest.webmanifest', './icons/icon-192.png', './icons/icon-512.png', './fonts/ByteBounce.ttf', './mascot.js', './demo.js'];
 
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL)).then(() => self.skipWaiting()));

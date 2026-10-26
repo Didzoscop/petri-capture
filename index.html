@@ -352,7 +352,8 @@ body.manual .meters,body.manual .btn.lens{display:none}
       <li data-i18n="step2"></li>
       <li data-i18n="step3"></li>
     </ol>
-    <button class="btn primary" id="btnStart" type="button" data-i18n="start"></button>
+    <div class="row"><button class="btn primary" id="btnStart" type="button" data-i18n="start"></button>
+    <button class="btn" id="btnDemo" type="button" data-i18n="demo"></button></div>
     <div class="error-box" id="startError"></div>
     </div>
   </div>
@@ -366,11 +367,12 @@ body.manual .meters,body.manual .btn.lens{display:none}
 <div class="toast" id="toast" role="status"></div>
 
 <script src="mascot.js"></script>
+<script src="demo.js"></script>
 <script>
 (() => {
 'use strict';
 const $ = id => document.getElementById(id);
-const APP_VERSION = 'v17 · 26/10'; // à incrémenter à chaque publication
+const APP_VERSION = 'v18 · 26/10'; // à incrémenter à chaque publication
 $('ver').textContent = APP_VERSION;
 
 /* ---------- Mascotte (dessin et animation dans mascot.js) ---------- */
@@ -409,7 +411,7 @@ const I18N = {
     calibNow:'Calibrate now',
     startTitle:'Snap Petri dishes hands-free', startIntro:'Mount the device, back camera facing the base.',
     step1:'Keep the base empty: the app finds the markers and places the circles.', step2:'Check the circles, then save.',
-    step3:'Place each dish: the photo is taken automatically.', start:'Start camera', rotate:'Turn the device to landscape.',
+    step3:'Place each dish: the photo is taken automatically.', start:'Start camera', demo:'Try without a camera', demoHint:'Demo: click the image to place or remove a dish.', rotate:'Turn the device to landscape.',
     langSwitch:'Passer en français', reload:'Reload to get the latest version',
     waiting:'Waiting', ready:'Ready', placeLid:'Place a dish and its lid.', place:'Place an open dish.',
     detected:'Dish detected', newDish:'New dish', holdStill:'Hold still.', retrying:'Trying again',
@@ -458,7 +460,7 @@ const I18N = {
     calibNow:'Calibrer maintenant',
     startTitle:"Photographiez les boîtes sans toucher l'écran", startIntro:"Fixez l'appareil, caméra arrière vers le socle.",
     step1:"Laissez le socle vide : l'app repère les marqueurs et place les cercles.", step2:'Vérifiez les cercles, puis enregistrez.',
-    step3:'Posez chaque boîte : la photo part toute seule.', start:'Démarrer la caméra', rotate:"Tournez l'appareil en paysage.",
+    step3:'Posez chaque boîte : la photo part toute seule.', start:'Démarrer la caméra', demo:'Essayer sans caméra', demoHint:"Démo : cliquez sur l'image pour poser ou retirer une boîte.", rotate:"Tournez l'appareil en paysage.",
     langSwitch:'Switch to English', reload:'Recharger pour avoir la dernière version',
     waiting:'En attente', ready:'Prêt', placeLid:'Posez une boîte et son couvercle.', place:'Posez une boîte ouverte.',
     detected:'Boîte détectée', newDish:'Nouvelle boîte', holdStill:'Ne bougez plus.', retrying:'Nouvel essai',
@@ -604,9 +606,11 @@ function toast(msg){
 const runActions = () => [{ label:T('photoNow'), fn: manualCapture }];
 
 /* ---------- Caméra ---------- */
+// mode démo (bouton de l'accueil ou adresse avec ?demo) : fausse caméra de demo.js, pour essayer l'app sans caméra
+let demo = /[?&]demo\b/.test(location.search);
 async function startCamera(){
   const err = $('startError'); err.classList.remove('show');
-  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
+  if (!demo && (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia)){
     showStartError(t('errNoApi'));
     return;
   }
@@ -615,7 +619,7 @@ async function startCamera(){
     focusLocked = false; lockVerify = false; refreshRef = false; // nouvelle caméra : nouvelle mise au point
     const v = { width:{ ideal:3840 }, height:{ ideal:2160 } };
     if (settings.deviceId) v.deviceId = { exact: settings.deviceId }; else v.facingMode = { ideal:'environment' };
-    try{ stream = await navigator.mediaDevices.getUserMedia({ video:v, audio:false }); }
+    try{ stream = demo ? PetriDemo.start() : await navigator.mediaDevices.getUserMedia({ video:v, audio:false }); }
     catch(e){
       if (settings.deviceId && (e.name === 'OverconstrainedError' || e.name === 'NotFoundError')){
         settings.deviceId = ''; store.set('petri.settings', settings);
@@ -1367,7 +1371,11 @@ const selCalib = $('selCalib'); selCalib.value = settings.calibMode;
 selCalib.addEventListener('change', () => { settings.calibMode = selCalib.value; store.set('petri.settings', settings); });
 
 /* ---------- En-tête ---------- */
-$('btnStart').addEventListener('click', () => { initAudio(); startCamera(); try{ navigator.storage && navigator.storage.persist && navigator.storage.persist(); }catch(e){} });
+$('btnStart').addEventListener('click', () => { initAudio(); demo = false; startCamera(); try{ navigator.storage && navigator.storage.persist && navigator.storage.persist(); }catch(e){} });
+$('btnDemo').addEventListener('click', () => { initAudio(); demo = true; startCamera().then(() => toast(t('demoHint'))); });
+// démo : un clic sur l'image pose ou retire la boîte et son couvercle
+$('viewer').addEventListener('click', () => { if (demo && mode === 'run') PetriDemo.toggle(); });
+if (demo) startCamera().then(() => toast(t('demoHint')));
 $('btnCalib').addEventListener('click', () => { if (stream) enterCalibration(); });
 $('btnPhotos').addEventListener('click', () => { openSheet('sheetPhotos'); renderGrid(); });
 $('btnSettings').addEventListener('click', () => { openSheet('sheetSettings'); listCameras(); });
