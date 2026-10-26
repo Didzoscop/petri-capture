@@ -410,6 +410,14 @@ body.manual .meters,body.manual .btn.lens{display:none}
     <label class="choice"><input type="radio" name="mailWhat" value="session" checked> <span id="mailSession"></span></label>
     <label class="choice"><input type="radio" name="mailWhat" value="all"> <span id="mailAll"></span></label>
     <div class="field" style="margin-top:.7rem">
+      <label for="mailQuality" data-i18n="qualLabel"></label>
+      <select id="mailQuality">
+        <option value="full" data-i18n="qualFull"></option>
+        <option value="medium" data-i18n="qualMedium"></option>
+        <option value="light" data-i18n="qualLight"></option>
+      </select>
+    </div>
+    <div class="field">
       <label for="mailTo" data-i18n="emailLabel"></label>
       <input type="email" id="mailTo" autocomplete="email" inputmode="email" placeholder="name@example.org">
     </div>
@@ -432,7 +440,7 @@ body.manual .meters,body.manual .btn.lens{display:none}
 (() => {
 'use strict';
 const $ = id => document.getElementById(id);
-const APP_VERSION = 'v25 · 26/10'; // à incrémenter à chaque publication
+const APP_VERSION = 'v26 · 26/10'; // à incrémenter à chaque publication
 $('ver').textContent = APP_VERSION;
 
 /* ---------- Mascotte (dessin et animation dans mascot.js) ---------- */
@@ -442,7 +450,7 @@ const video = $('video'), svg = $('overlay');
 const SVGNS = 'http://www.w3.org/2000/svg';
 
 /* ---------- Réglages persistants ---------- */
-const DEFAULTS = { sens:20, presence:20, stableMs:1000, motionTol:3.5, focusMs:1500, lockFocus:true, requireLid:true, sharpCheck:true, meters:true, sound:true, deviceId:'', calibMode:'aruco', lang:'en', resolution:'max', email:'', sessionGap:30 };
+const DEFAULTS = { sens:20, presence:20, stableMs:1000, motionTol:3.5, focusMs:1500, lockFocus:true, requireLid:true, sharpCheck:true, meters:true, sound:true, deviceId:'', calibMode:'aruco', lang:'en', resolution:'max', email:'', sessionGap:30, mailQuality:'full' };
 const store = {
   get(k, d){ try{ const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; }catch(e){ return d; } },
   set(k, v){ try{ localStorage.setItem(k, JSON.stringify(v)); }catch(e){} }
@@ -508,7 +516,7 @@ const I18N = {
     mailHowDownload: p => 'This device cannot attach files directly: the .zip files are downloaded and a new email to ' + p.to + ' opens. Attach them by hand.',
     mailPart: p => 'Send part ' + p.i + '/' + p.n + ' (' + p.mb + ' MB)', mailPartOne: p => 'Send (' + p.mb + ' MB)',
     mailSubject: p => 'Petri·Capture – ' + p.date + (p.parts > 1 ? ' (' + p.i + '/' + p.parts + ')' : ''),
-    mailBody: p => plural(p.n, 'photo', 'photos') + ' from Petri·Capture.', mailCopied:'Address copied.', zipRefused:'This device refuses .zip files: tap again to send the photos directly.', galleryHow:'Max 10 photos per share: tap each part and choose where to save.', mailShareFail: p => 'Sharing failed: ' + p.e,
+    mailBody: p => plural(p.n, 'photo', 'photos') + ' from Petri·Capture.', mailCopied:'Address copied.', qualLabel:'Image quality', qualFull:'Full resolution (as taken)', qualMedium:'Medium (2000 px, lighter)', qualLight:'Light (1200 px, smallest)', zipRefused:'This device refuses .zip files: tap again to send the photos directly.', galleryHow:'Max 10 photos per share: tap each part and choose where to save.', mailShareFail: p => 'Sharing failed: ' + p.e,
     errNoCam:'No camera found.', errBusy:'Another app is using the camera. Close it and retry.',
     errStart: p => 'Cannot start the camera (' + p.e + ').', camN: p => 'Camera ' + p.n, camInfo: p => 'Image: ' + p.w + ' × ' + p.h + ' px',
     emptyGrid:'No photos yet. Place a dish on the base to start.', exported:'exported',
@@ -569,7 +577,7 @@ const I18N = {
     mailHowDownload: p => "Cet appareil ne sait pas joindre de fichier directement : les .zip sont téléchargés et un e-mail à " + p.to + " s'ouvre. Joignez-les à la main.",
     mailPart: p => 'Envoyer la partie ' + p.i + '/' + p.n + ' (' + p.mb + ' Mo)', mailPartOne: p => 'Envoyer (' + p.mb + ' Mo)',
     mailSubject: p => 'Petri·Capture – ' + p.date + (p.parts > 1 ? ' (' + p.i + '/' + p.parts + ')' : ''),
-    mailBody: p => plural(p.n, 'photo', 'photos') + ' de Petri·Capture.', mailCopied:'Adresse copiée.', zipRefused:"Cet appareil refuse les .zip : appuyez à nouveau pour envoyer les photos directement.", galleryHow:'10 photos au plus par partage : appuyez sur chaque partie et choisissez où enregistrer.', mailShareFail: p => 'Partage impossible : ' + p.e,
+    mailBody: p => plural(p.n, 'photo', 'photos') + ' de Petri·Capture.', mailCopied:'Adresse copiée.', qualLabel:"Qualité des images", qualFull:'Pleine résolution (telle que prise)', qualMedium:'Moyenne (2000 px, plus légère)', qualLight:'Légère (1200 px, la plus petite)', zipRefused:"Cet appareil refuse les .zip : appuyez à nouveau pour envoyer les photos directement.", galleryHow:'10 photos au plus par partage : appuyez sur chaque partie et choisissez où enregistrer.', mailShareFail: p => 'Partage impossible : ' + p.e,
     errNoCam:'Aucune caméra trouvée.', errBusy:'Une autre app utilise la caméra. Fermez-la puis réessayez.',
     errStart: p => 'Impossible de démarrer la caméra (' + p.e + ').', camN: p => 'Caméra ' + p.n, camInfo: p => 'Image : ' + p.w + ' × ' + p.h + ' px',
     emptyGrid:"Aucune photo pour l'instant. Posez une boîte sur le socle pour commencer.", exported:'exportée',
@@ -1470,23 +1478,37 @@ $('btnMail').addEventListener('click', async () => {
   $('mailSession').textContent = t('mailSession', { n:ses.length, from:dayOf(ses[0].id) + ' ' + hm(ses[0].id), to:hm(ses[ses.length-1].id) });
   $('mailAll').textContent = t('mailAll', { n:mailAllRecs.length });
   document.querySelector('input[name=mailWhat][value=session]').checked = true;
-  $('mailTo').value = settings.email; $('mailStep1').hidden = false; $('mailStep2').hidden = true;
+  $('mailTo').value = settings.email; $('mailQuality').value = settings.mailQuality; $('mailStep1').hidden = false; $('mailStep2').hidden = true;
   $('mailDlg').showModal();
 });
 $('mailCancel').addEventListener('click', () => $('mailDlg').close());
 $('mailClose').addEventListener('click', () => $('mailDlg').close());
 $('mailCopy').addEventListener('click', () => copyAddress(settings.email));
 let mailJob = null; // { recs, addr, mode, gallery }
+// qualités allégées : plus grand côté réduit et JPEG plus compressé ; « full » envoie les photos telles qu'enregistrées
+const QUALITY = { medium:{ px:2000, q:.85 }, light:{ px:1200, q:.75 } };
+async function reencode(r, level){
+  const { px, q } = QUALITY[level], bmp = await createImageBitmap(r.blob);
+  const k = Math.min(1, px / Math.max(bmp.width, bmp.height)), c = document.createElement('canvas');
+  c.width = Math.round(bmp.width*k); c.height = Math.round(bmp.height*k);
+  c.getContext('2d').drawImage(bmp, 0, 0, c.width, c.height); if (bmp.close) bmp.close();
+  const blob = await new Promise((res, rej) => c.toBlob(b => b ? res(b) : rej(new Error('encodage impossible')), 'image/jpeg', q));
+  return Object.assign({}, r, { blob });
+}
 $('mailPrepare').addEventListener('click', async () => {
   const addr = $('mailTo').value.trim();
   if (!validMail(addr)){ toast(t('mailBadAddr')); $('mailTo').focus(); return; }
   settings.email = addr; store.set('petri.settings', settings); $('setEmail').value = addr;
   copyAddress(addr); // tant que l'appui est récent (exigé par iPhone)
-  const recs = document.querySelector('input[name=mailWhat]:checked').value === 'all' ? mailAllRecs : lastSession(mailAllRecs);
+  let recs = document.querySelector('input[name=mailWhat]:checked').value === 'all' ? mailAllRecs : lastSession(mailAllRecs);
+  const quality = $('mailQuality').value; settings.mailQuality = quality; store.set('petri.settings', settings);
   const photosOk = canShareType('image/jpeg', 'a.jpg');
   const mode = !photosOk ? 'download' : (appleMobile && window.JSZip) ? 'zip' : 'photos';
   const btn = $('mailPrepare'); btn.disabled = true; btn.textContent = t('mailBusy');
-  try{ await buildParts({ recs, addr, mode, gallery:false }); }catch(e){ toast(t('exportFail', { e:e.message || e })); }
+  try{
+    if (quality !== 'full'){ const out = []; for (const r of recs) out.push(await reencode(r, quality)); recs = out; } // une à une, pour ménager la mémoire
+    await buildParts({ recs, addr, mode, gallery:false });
+  }catch(e){ toast(t('exportFail', { e:e.message || e })); }
   btn.disabled = false; btn.textContent = t('mailPrepare');
 });
 async function buildParts(job){
