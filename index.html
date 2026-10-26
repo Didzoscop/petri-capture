@@ -76,12 +76,12 @@ main{position:relative;display:grid;min-height:0;padding:.6rem 1rem .8rem .6rem}
 /* messages courts, en simple texte noir */
 .status{align-self:stretch;display:flex;flex-direction:column;gap:.55rem}
 .status .txt{display:flex;flex-direction:column;gap:.15rem;min-width:0}
-.status .big{font-size:clamp(1.15rem,4.6vh,1.9rem);font-weight:700;line-height:1.1}
-.status .small{font-size:clamp(.9rem,2.9vh,1.15rem);line-height:1.25}
-.status .actions{display:flex;flex-wrap:wrap;gap:.5rem;padding:0 var(--b) var(--b) 0}
-.status .actions .btn{flex:1 1 auto}
-.status .actions:empty{display:none}
-.status .actions .btn{justify-content:center}
+/* hauteurs réservées (titre sur 1 ligne, phrase sur 3 lignes, 1 rangée d'actions) : le menu en dessous ne bouge jamais */
+.status .big{font-size:clamp(1.15rem,4.6vh,1.9rem);font-weight:700;line-height:1.1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.status .small{font-size:clamp(.9rem,2.9vh,1.15rem);line-height:1.25;height:3.75em;overflow:hidden;
+  display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:3}
+.status .actions{--ah:46px;display:grid;grid-auto-flow:column;grid-auto-columns:1fr;gap:.5rem;height:calc(var(--ah) + var(--b));padding:0 var(--b) var(--b) 0}
+.status .actions .btn{justify-content:center;text-align:center;height:var(--ah);min-height:0;padding:.15rem .35rem;line-height:1.05;white-space:normal}
 
 .stage{container-type:size;display:grid;place-items:center;min-height:0}
 .frame{
@@ -209,6 +209,8 @@ body.manual .meters,body.manual .btn.lens{display:none}
 @media (max-height:480px){
   .side{padding:.4rem .2rem .5rem .7rem;gap:.45rem}
   .side .btn{min-height:34px;padding:.15rem .5rem;font-size:.9rem}
+  .status .actions{--ah:38px}
+  .status .actions .btn{font-size:.8rem}
   .nav{gap:.4rem}
   .brand h1{font-size:1rem}
   .flag svg{width:26px;height:16px}
@@ -361,7 +363,7 @@ body.manual .meters,body.manual .btn.lens{display:none}
 (() => {
 'use strict';
 const $ = id => document.getElementById(id);
-const APP_VERSION = 'v11 · 26/10'; // à incrémenter à chaque publication
+const APP_VERSION = 'v12 · 26/10'; // à incrémenter à chaque publication
 $('ver').textContent = APP_VERSION;
 
 /* ---------- Mascotte (dessin et animation dans mascot.js) ---------- */
@@ -576,7 +578,7 @@ function setStatus(tone, big, small, actions){
   lastStatus = [tone, big, small, actions];
   const st = $('status'), b = txt(big);
   if (b !== $('stBig').textContent || tone !== st.dataset.tone) mascotTalk();
-  st.dataset.tone = tone; $('frame').dataset.tone = tone; $('stBig').textContent = b; $('stSmall').textContent = txt(small);
+  st.dataset.tone = tone; $('frame').dataset.tone = tone; $('stBig').textContent = b; $('stSmall').textContent = $('stSmall').title = txt(small);
   const box = $('stActions'); box.innerHTML = '';
   (actions || []).forEach(a => {
     const b = document.createElement('button');
