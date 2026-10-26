@@ -200,6 +200,19 @@ select{width:100%;min-height:44px;border:var(--b) solid var(--ink);border-radius
 .start .btn.primary{font-size:1.15rem;padding:.6rem 1.3rem}
 .error-box{margin-top:1rem;padding:.7rem 1rem;border:var(--b) solid var(--err);color:var(--ink);display:none}
 .error-box.show{display:block}
+/* fenêtre d'envoi par e-mail */
+dialog.pix{border:5px solid var(--ink);background:var(--paper);color:var(--ink);padding:1rem 1.2rem;width:min(30rem,94vw);max-height:94vh;overflow:auto;box-shadow:8px 8px 0 var(--ink)}
+dialog.pix::backdrop{background:rgba(26,26,26,.45)}
+dialog.pix h2{margin:0 0 .6rem;font-size:1.3rem;text-transform:uppercase;letter-spacing:.06em}
+dialog.pix p{margin:.3rem 0 .6rem}
+dialog.pix .note{margin:.2rem 0 .7rem}
+.choice{display:flex;align-items:center;gap:.6rem;margin:.35rem 0;min-height:34px}
+.choice input{width:22px;height:22px;accent-color:var(--ink)}
+input[type=email]{width:100%;min-height:44px;border:var(--b) solid var(--ink);border-radius:0;background:var(--bg);padding:0 .6rem;font:inherit}
+.parts{display:flex;flex-direction:column;gap:.5rem;margin:.6rem 0;padding:0 var(--b) var(--b) 0}
+.parts .btn{justify-content:space-between}
+.parts .btn.done{opacity:.55}
+dialog.pix .row{margin-top:.8rem;padding:0 var(--b) var(--b) 0}
 .toast{
   position:fixed;left:50%;bottom:calc(1rem + env(safe-area-inset-bottom,0px));transform:translateX(-50%);
   background:var(--ink);color:var(--paper);padding:.5rem 1rem;z-index:40;display:none;max-width:90vw;
@@ -290,6 +303,7 @@ body.manual .meters,body.manual .btn.lens{display:none}
   <div class="sheet-body"><div class="grid" id="grid"></div></div>
   <div class="sheet-foot">
     <button class="btn primary" id="btnShare" type="button" data-i18n="share"></button>
+    <button class="btn" id="btnMail" type="button" data-i18n="mailBtn"></button>
     <button class="btn" id="btnZip" type="button" data-i18n="zip"></button>
     <button class="btn danger" id="btnClearExported" type="button" data-i18n="clearExported"></button>
     <p class="note" data-i18n="exportNote"></p>
@@ -352,6 +366,18 @@ body.manual .meters,body.manual .btn.lens{display:none}
       <p data-i18n="selCalibHelp"></p>
     </div>
     <div class="row"><button class="btn" id="btnCalib2" type="button" data-i18n="calibNow"></button></div>
+
+    <div class="group-title" data-gicon="mail"><span data-i18n="grpExport"></span></div>
+    <div class="field">
+      <label for="setEmail" data-i18n="emailLabel"></label>
+      <input type="email" id="setEmail" autocomplete="email" inputmode="email" placeholder="name@example.org">
+      <p data-i18n="emailHelp"></p>
+    </div>
+    <div class="field">
+      <label for="sGap"><span data-i18n="sGap"></span> <span id="vGap"></span></label>
+      <input type="range" id="sGap" min="5" max="180" step="5">
+      <p data-i18n="sGapHelp"></p>
+    </div>
   </div>
 </aside>
 
@@ -378,6 +404,26 @@ body.manual .meters,body.manual .btn.lens{display:none}
   <p data-i18n="rotate"></p>
 </div>
 
+<dialog class="pix" id="mailDlg">
+  <div id="mailStep1">
+    <h2 data-i18n="mailTitle"></h2>
+    <label class="choice"><input type="radio" name="mailWhat" value="session" checked> <span id="mailSession"></span></label>
+    <label class="choice"><input type="radio" name="mailWhat" value="all"> <span id="mailAll"></span></label>
+    <div class="field" style="margin-top:.7rem">
+      <label for="mailTo" data-i18n="emailLabel"></label>
+      <input type="email" id="mailTo" autocomplete="email" inputmode="email" placeholder="name@example.org">
+    </div>
+    <div class="row"><button class="btn" id="mailCancel" type="button" data-i18n="cancel"></button><button class="btn primary" id="mailPrepare" type="button" data-i18n="mailPrepare"></button></div>
+  </div>
+  <div id="mailStep2" hidden>
+    <h2 data-i18n="mailTitle"></h2>
+    <p id="mailInfo"></p>
+    <p class="note" id="mailHow"></p>
+    <div class="parts" id="mailParts"></div>
+    <div class="row"><button class="btn" id="mailCopy" type="button" data-i18n="mailCopy"></button><button class="btn" id="mailClose" type="button" data-i18n="close"></button></div>
+  </div>
+</dialog>
+
 <div class="toast" id="toast" role="status"></div>
 
 <script src="mascot.js"></script>
@@ -386,7 +432,7 @@ body.manual .meters,body.manual .btn.lens{display:none}
 (() => {
 'use strict';
 const $ = id => document.getElementById(id);
-const APP_VERSION = 'v23 · 26/10'; // à incrémenter à chaque publication
+const APP_VERSION = 'v24 · 26/10'; // à incrémenter à chaque publication
 $('ver').textContent = APP_VERSION;
 
 /* ---------- Mascotte (dessin et animation dans mascot.js) ---------- */
@@ -396,7 +442,7 @@ const video = $('video'), svg = $('overlay');
 const SVGNS = 'http://www.w3.org/2000/svg';
 
 /* ---------- Réglages persistants ---------- */
-const DEFAULTS = { sens:20, presence:20, stableMs:1000, motionTol:3.5, focusMs:1500, lockFocus:true, requireLid:true, sharpCheck:true, meters:true, sound:true, deviceId:'', calibMode:'aruco', lang:'en', resolution:'max' };
+const DEFAULTS = { sens:20, presence:20, stableMs:1000, motionTol:3.5, focusMs:1500, lockFocus:true, requireLid:true, sharpCheck:true, meters:true, sound:true, deviceId:'', calibMode:'aruco', lang:'en', resolution:'max', email:'', sessionGap:30 };
 const store = {
   get(k, d){ try{ const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; }catch(e){ return d; } },
   set(k, v){ try{ localStorage.setItem(k, JSON.stringify(v)); }catch(e){} }
@@ -452,6 +498,17 @@ const I18N = {
     errNoApi:'This browser cannot use the camera. Open the page over HTTPS in Safari or Chrome.',
     errDenied:'Camera access denied. Allow it in the browser settings, and open the page directly in Safari or Chrome.',
     resLabel:'Resolution', resMax: p => 'Maximum' + (p.w ? ' (' + p.w + ' × ' + p.h + ')' : ''), resHelp:'Maximum gives the sharpest photos. Lower it if the app is slow.',
+    grpExport:'Email export', emailLabel:'Recipient email', emailHelp:'Used by "Send by email" in Photos. Stored only on this device.',
+    sGap:'New session after', sGapHelp:'Photos taken with less than this gap belong to the same session.',
+    mailBtn:'Send by email', mailTitle:'Send by email', mailPrepare:'Prepare', mailCopy:'Copy address', mailNone:'No photos to send.',
+    mailSession: p => 'Last session: ' + plural(p.n, 'photo', 'photos') + ' (' + p.from + ' – ' + p.to + ')', mailAll: p => 'All photos (' + p.n + ')',
+    mailBadAddr:'Enter a valid email address.', mailBusy:'Preparing…',
+    mailInfo: p => plural(p.n, 'photo', 'photos') + ', ' + p.mb + ' MB' + (p.parts > 1 ? ', in ' + p.parts + ' emails (size limit).' : '.'),
+    mailHowShare: p => 'Tap each part, choose your mail app (Outlook, Gmail, Mail…). The address ' + p.to + ' is copied: in the "To" field, long-press then Paste.',
+    mailHowDownload: p => 'This device cannot attach files directly: the .zip files are downloaded and a new email to ' + p.to + ' opens. Attach them by hand.',
+    mailPart: p => 'Send part ' + p.i + '/' + p.n + ' (' + p.mb + ' MB)', mailPartOne: p => 'Send (' + p.mb + ' MB)',
+    mailSubject: p => 'Petri·Capture – ' + p.date + (p.parts > 1 ? ' (' + p.i + '/' + p.parts + ')' : ''),
+    mailBody: p => plural(p.n, 'photo', 'photos') + ' from Petri·Capture.', mailCopied:'Address copied.', mailShareFail: p => 'Sharing failed: ' + p.e,
     errNoCam:'No camera found.', errBusy:'Another app is using the camera. Close it and retry.',
     errStart: p => 'Cannot start the camera (' + p.e + ').', camN: p => 'Camera ' + p.n, camInfo: p => 'Image: ' + p.w + ' × ' + p.h + ' px',
     emptyGrid:'No photos yet. Place a dish on the base to start.', exported:'exported',
@@ -502,6 +559,17 @@ const I18N = {
     errNoApi:"Ce navigateur n'accède pas à la caméra. Ouvrez la page en HTTPS dans Safari ou Chrome.",
     errDenied:"Accès à la caméra refusé. Autorisez-le dans les réglages du navigateur, et ouvrez la page directement dans Safari ou Chrome.",
     resLabel:'Résolution', resMax: p => 'Maximum' + (p.w ? ' (' + p.w + ' × ' + p.h + ')' : ''), resHelp:"Maximum donne les photos les plus nettes. Baissez-la si l'app rame.",
+    grpExport:'Envoi par e-mail', emailLabel:'Adresse du destinataire', emailHelp:'Utilisée par « Envoyer par e-mail » dans Photos. Enregistrée seulement sur cet appareil.',
+    sGap:'Nouvelle session après', sGapHelp:'Les photos prises à moins de cet écart font partie de la même session.',
+    mailBtn:'Envoyer par e-mail', mailTitle:'Envoyer par e-mail', mailPrepare:'Préparer', mailCopy:"Copier l'adresse", mailNone:'Aucune photo à envoyer.',
+    mailSession: p => 'Dernière session : ' + plural(p.n, 'photo', 'photos') + ' (' + p.from + ' – ' + p.to + ')', mailAll: p => 'Toutes les photos (' + p.n + ')',
+    mailBadAddr:'Saisissez une adresse e-mail valide.', mailBusy:'Préparation…',
+    mailInfo: p => plural(p.n, 'photo', 'photos') + ', ' + p.mb + ' Mo' + (p.parts > 1 ? ', en ' + p.parts + ' e-mails (limite de taille).' : '.'),
+    mailHowShare: p => 'Appuyez sur chaque partie et choisissez votre messagerie (Outlook, Gmail, Mail…). L\'adresse ' + p.to + ' est copiée : dans le champ « À », appui long puis Coller.',
+    mailHowDownload: p => "Cet appareil ne sait pas joindre de fichier directement : les .zip sont téléchargés et un e-mail à " + p.to + " s'ouvre. Joignez-les à la main.",
+    mailPart: p => 'Envoyer la partie ' + p.i + '/' + p.n + ' (' + p.mb + ' Mo)', mailPartOne: p => 'Envoyer (' + p.mb + ' Mo)',
+    mailSubject: p => 'Petri·Capture – ' + p.date + (p.parts > 1 ? ' (' + p.i + '/' + p.parts + ')' : ''),
+    mailBody: p => plural(p.n, 'photo', 'photos') + ' de Petri·Capture.', mailCopied:'Adresse copiée.', mailShareFail: p => 'Partage impossible : ' + p.e,
     errNoCam:'Aucune caméra trouvée.', errBusy:'Une autre app utilise la caméra. Fermez-la puis réessayez.',
     errStart: p => 'Impossible de démarrer la caméra (' + p.e + ').', camN: p => 'Caméra ' + p.n, camInfo: p => 'Image : ' + p.w + ' × ' + p.h + ' px',
     emptyGrid:"Aucune photo pour l'instant. Posez une boîte sur le socle pour commencer.", exported:'exportée',
@@ -601,7 +669,8 @@ const GROUP_ICONS = {
   detect: ['.####...','#....#..','#....#..','#....#..','#....#..','.####...','....###.','.....###'],
   checks: ['......##','.....###','#...###.','##.###..','#####...','.###....','..#.....','........'],
   camera: ['..###...','########','#......#','#..##..#','#.#..#.#','#..##..#','#......#','########'],
-  calib:  ['...##...','..####..','.#.##.#.','###..###','###..###','.#.##.#.','..####..','...##...']
+  calib:  ['...##...','..####..','.#.##.#.','###..###','###..###','.#.##.#.','..####..','...##...'],
+  mail:   ['........','########','##....##','#.#..#.#','#..##..#','#......#','########','........']
 };
 document.querySelectorAll('[data-gicon]').forEach(e => {
   const px = []; GROUP_ICONS[e.dataset.gicon].forEach((r, y) => [...r].forEach((c, x) => { if (c === '#') px.push('<rect x="' + x + '" y="' + y + '" width="1" height="1"/>'); }));
@@ -1374,6 +1443,97 @@ $('btnClearExported').addEventListener('click', async () => {
   renderGrid(); refreshCount();
 });
 
+/* ---------- Envoi par e-mail ----------
+   L'app n'a pas de serveur : elle prépare les fichiers et ouvre le menu de partage (Outlook, Gmail, Mail…), pièces jointes incluses.
+   Le partage ne sait pas remplir le destinataire : l'adresse est copiée pour être collée dans « À ».
+   iPhone : .zip ; Android (Chrome refuse les .zip) : photos jointes directement ; ordinateur sans partage : .zip téléchargés + mailto.
+   Les envois sont découpés à 18 Mo, sous la limite habituelle des messageries. Chaque partage doit partir d'un appui (d'où une étape « Préparer »). */
+const MAIL_LIMIT = 18 * 1024 * 1024;
+const validMail = a => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(a);
+const hm = id => { const d = new Date(id); return pad(d.getHours()) + 'h' + pad(d.getMinutes()); };
+const dayOf = id => { const d = new Date(id); return d.getFullYear() + '-' + pad(d.getMonth()+1) + '-' + pad(d.getDate()); };
+// dernière session : on remonte depuis la photo la plus récente tant que l'écart reste sous le seuil
+function lastSession(all){
+  const sorted = all.slice().sort((a, b) => b.id - a.id), gap = settings.sessionGap * 60000, out = [];
+  for (const r of sorted){ if (out.length && out[out.length-1].id - r.id > gap) break; out.push(r); }
+  return out.reverse();
+}
+function canShareType(type, name){
+  try{ return !!(navigator.canShare && navigator.canShare({ files:[new File([new Blob(['x'], { type })], name, { type })] })); }catch(e){ return false; }
+}
+function batches(recs){ // groupes de photos sous la limite de taille (une photo trop grosse part seule)
+  const out = []; let cur = [], size = 0;
+  recs.forEach(r => { if (cur.length && size + r.blob.size > MAIL_LIMIT){ out.push(cur); cur = []; size = 0; } cur.push(r); size += r.blob.size; });
+  if (cur.length) out.push(cur);
+  return out;
+}
+const mb = n => (n / 1048576).toFixed(1).replace('.', t('dec'));
+let mailAllRecs = [], mailParts = [];
+async function copyAddress(addr){
+  try{ await navigator.clipboard.writeText(addr); toast(t('mailCopied')); return true; }
+  catch(e){ try{ const ta = document.createElement('textarea'); ta.value = addr; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); ta.remove(); toast(t('mailCopied')); return true; }catch(e2){ return false; } }
+}
+$('btnMail').addEventListener('click', async () => {
+  mailAllRecs = (await photoAll()).sort((a, b) => a.id - b.id);
+  if (!mailAllRecs.length){ toast(t('mailNone')); return; }
+  const ses = lastSession(mailAllRecs);
+  $('mailSession').textContent = t('mailSession', { n:ses.length, from:dayOf(ses[0].id) + ' ' + hm(ses[0].id), to:hm(ses[ses.length-1].id) });
+  $('mailAll').textContent = t('mailAll', { n:mailAllRecs.length });
+  document.querySelector('input[name=mailWhat][value=session]').checked = true;
+  $('mailTo').value = settings.email; $('mailStep1').hidden = false; $('mailStep2').hidden = true;
+  $('mailDlg').showModal();
+});
+$('mailCancel').addEventListener('click', () => $('mailDlg').close());
+$('mailClose').addEventListener('click', () => $('mailDlg').close());
+$('mailCopy').addEventListener('click', () => copyAddress(settings.email));
+$('mailPrepare').addEventListener('click', async () => {
+  const addr = $('mailTo').value.trim();
+  if (!validMail(addr)){ toast(t('mailBadAddr')); $('mailTo').focus(); return; }
+  settings.email = addr; store.set('petri.settings', settings); $('setEmail').value = addr;
+  copyAddress(addr); // tant que l'appui est récent (exigé par iPhone)
+  const recs = document.querySelector('input[name=mailWhat]:checked').value === 'all' ? mailAllRecs : lastSession(mailAllRecs);
+  const btn = $('mailPrepare'); btn.disabled = true; btn.textContent = t('mailBusy');
+  try{
+    const groups = batches(recs), date = dayOf(recs[0].id) + ' ' + hm(recs[0].id), total = recs.reduce((s, r) => s + r.blob.size, 0);
+    const zipOk = !!window.JSZip && canShareType('application/zip', 'a.zip'), photosOk = canShareType('image/jpeg', 'a.jpg');
+    const mode = zipOk ? 'zip' : photosOk ? 'photos' : 'download';
+    mailParts = [];
+    for (let i = 0; i < groups.length; i++){
+      const g = groups[i], suffix = groups.length > 1 ? '_' + (i+1) + '-' + groups.length : '';
+      let files;
+      if (mode === 'photos') files = g.map(r => new File([r.blob], r.name, { type:'image/jpeg' }));
+      else {
+        const zip = new JSZip(); g.forEach(r => zip.file(r.name, r.blob, { binary:true }));
+        const blob = await zip.generateAsync({ type:'blob', compression:'STORE' });
+        files = [new File([blob], 'petri_' + date.replace(' ', '_') + suffix + '.zip', { type:'application/zip' })];
+      }
+      mailParts.push({ files, ids:g.map(r => r.id), n:g.length, size:g.reduce((s, r) => s + r.blob.size, 0),
+        subject:t('mailSubject', { date, i:i+1, parts:groups.length }), body:t('mailBody', { n:g.length }) });
+    }
+    $('mailInfo').textContent = t('mailInfo', { n:recs.length, mb:mb(total), parts:groups.length });
+    $('mailHow').textContent = t(mode === 'download' ? 'mailHowDownload' : 'mailHowShare', { to:addr });
+    const box = $('mailParts'); box.innerHTML = '';
+    mailParts.forEach((p, i) => {
+      const b = document.createElement('button'); b.type = 'button'; b.className = 'btn' + (i === 0 ? ' primary' : '');
+      b.textContent = mailParts.length > 1 ? t('mailPart', { i:i+1, n:mailParts.length, mb:mb(p.size) }) : t('mailPartOne', { mb:mb(p.size) });
+      b.addEventListener('click', () => sendPart(p, b, mode, addr)); box.appendChild(b);
+    });
+    $('mailStep1').hidden = true; $('mailStep2').hidden = false;
+  }catch(e){ toast(t('exportFail', { e:e.message || e })); }
+  btn.disabled = false; btn.textContent = t('mailPrepare');
+});
+async function sendPart(p, b, mode, addr){
+  try{
+    if (mode === 'download'){
+      p.files.forEach(f => { const u = URL.createObjectURL(f), a = document.createElement('a'); a.href = u; a.download = f.name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(u), 30000); });
+      location.href = 'mailto:' + encodeURIComponent(addr) + '?subject=' + encodeURIComponent(p.subject) + '&body=' + encodeURIComponent(p.body);
+    } else await navigator.share({ files:p.files, title:p.subject, text:p.body });
+    b.classList.add('done'); b.classList.remove('primary'); b.textContent = '✓ ' + b.textContent.replace(/^✓ /, '');
+    const next = [...$('mailParts').children].find(x => !x.classList.contains('done')); if (next) next.classList.add('primary');
+    await markExported(p.ids); refreshCount(); if ($('sheetPhotos').classList.contains('open')) renderGrid();
+  }catch(e){ if (e && e.name !== 'AbortError') toast(t('mailShareFail', { e:e.message || e })); }
+}
+
 /* ---------- Réglages ---------- */
 const rangeLabels = []; // réaffichées au changement de langue (séparateur décimal)
 const fillRange = i => i.style.setProperty('--p', (i.value - i.min) / (i.max - i.min) * 100 + '%'); // partie remplie de la piste
@@ -1387,6 +1547,9 @@ bindRange('sPresence', 'presence', x => x + ' %');
 bindRange('sStable', 'stableMs', x => (x/1000).toFixed(1).replace('.', t('dec')) + ' s');
 bindRange('sMotion', 'motionTol', x => String(x).replace('.', t('dec')));
 bindRange('sFocus', 'focusMs', x => (x/1000).toFixed(1).replace('.', t('dec')) + ' s');
+bindRange('sGap', 'sessionGap', x => x + ' min');
+$('setEmail').value = settings.email;
+$('setEmail').addEventListener('change', () => { settings.email = $('setEmail').value.trim(); store.set('petri.settings', settings); });
 function bindCheck(id, key, after){
   const c = $(id); c.checked = !!settings[key];
   c.addEventListener('change', () => { settings[key] = c.checked; store.set('petri.settings', settings); after && after(); });
