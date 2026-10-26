@@ -53,8 +53,12 @@ button{cursor:pointer}
 .flag{margin-left:auto;padding:3px;min-height:0;border:var(--b) solid var(--ink);background:var(--paper);box-shadow:var(--b) var(--b) 0 var(--ink);line-height:0;cursor:pointer}
 .flag:active{transform:translate(var(--b),var(--b));box-shadow:none}
 .flag svg{width:32px;height:20px;display:block;shape-rendering:crispEdges}
-.nav{display:grid;grid-template-columns:1fr 1fr;gap:.55rem;margin-top:auto;padding:0 var(--b) var(--b) 0}
-.nav .btn{justify-content:center}
+/* boutons en icônes pixel : actions du moment puis navigation, dans une seule grille juste sous le message */
+.tools{display:grid;grid-template-columns:repeat(3,1fr);gap:.5rem;padding:0 var(--b) var(--b) 0}
+.tools .actions,.tools .nav{display:contents}
+.ibtn{position:relative;justify-content:center;min-height:50px;padding:.3rem}
+.ibtn svg{width:30px;height:30px;display:block;shape-rendering:crispEdges}
+.ibtn .count{position:absolute;right:3px;bottom:3px;font-size:.7rem;line-height:1.3;min-width:1.2rem;padding:0 .2rem}
 .brand h1{font-size:1.2rem;margin:0;font-weight:700;letter-spacing:.08em;text-transform:uppercase}
 .ver{font-size:.75rem;color:var(--muted)}
 .btn{
@@ -76,10 +80,7 @@ main{position:relative;display:grid;min-height:0;padding:.6rem 1rem .8rem .6rem}
 .status .txt{display:flex;flex-direction:column;gap:.15rem;min-width:0}
 .status .big{font-size:clamp(1.15rem,4.6vh,1.9rem);font-weight:700;line-height:1.1}
 .status .small{font-size:clamp(.9rem,2.9vh,1.15rem);line-height:1.25}
-.status .actions{display:flex;flex-wrap:wrap;gap:.5rem;padding:0 var(--b) var(--b) 0}
-.status .actions .btn{flex:1 1 auto}
-.status .actions:empty{display:none}
-.status .actions .btn{justify-content:center}
+
 
 .stage{container-type:size;display:grid;place-items:center;min-height:0}
 .frame{
@@ -207,7 +208,9 @@ body.manual .meters,body.manual .btn.lens{display:none}
 @media (max-height:480px){
   .side{padding:.4rem .2rem .5rem .7rem;gap:.45rem}
   .side .btn{min-height:34px;padding:.15rem .5rem;font-size:.9rem}
-  .nav{gap:.4rem}
+  .tools{gap:.4rem}
+  .side .ibtn{min-height:40px;padding:.15rem}
+  .ibtn svg{width:24px;height:24px}
   .brand h1{font-size:1rem}
   main{padding:.4rem .7rem .5rem .4rem}
   .mascot{--s:3px}
@@ -226,15 +229,17 @@ body.manual .meters,body.manual .btn.lens{display:none}
     <div class="mascot" id="mascot" aria-hidden="true"></div>
     <div class="status" id="status" data-tone="idle" role="status" aria-live="polite">
       <div class="txt"><span class="big" id="stBig"></span><span class="small" id="stSmall"></span></div>
-      <div class="actions" id="stActions"></div>
     </div>
   </div>
-  <nav class="nav">
-    <button class="btn" id="btnCalib" type="button" data-i18n="calibrate"></button>
-    <button class="btn" id="btnPhotos" type="button"><span data-i18n="photos"></span> <span class="count" id="countBadge">0</span></button>
-    <button class="btn" id="btnSettings" type="button" data-i18n="settings"></button>
-    <button class="btn" id="btnFull" type="button"><span aria-hidden="true">⛶</span> <span data-i18n="fullscreen"></span></button>
-  </nav>
+  <div class="tools">
+    <div class="actions" id="stActions"></div>
+    <nav class="nav">
+      <button class="btn ibtn" id="btnCalib" type="button" data-icon="calibrate" data-i18n-aria="calibrate"></button>
+      <button class="btn ibtn" id="btnPhotos" type="button" data-icon="photos" data-i18n-aria="photos"><span class="count" id="countBadge">0</span></button>
+      <button class="btn ibtn" id="btnSettings" type="button" data-icon="settings" data-i18n-aria="settings"></button>
+      <button class="btn ibtn" id="btnFull" type="button" data-icon="fullscreen" data-i18n-aria="fullscreen"></button>
+    </nav>
+  </div>
 </aside>
 
 <main>
@@ -356,7 +361,7 @@ body.manual .meters,body.manual .btn.lens{display:none}
 (() => {
 'use strict';
 const $ = id => document.getElementById(id);
-const APP_VERSION = 'v9 · 26/10'; // à incrémenter à chaque publication
+const APP_VERSION = 'v10 · 26/10'; // à incrémenter à chaque publication
 $('ver').textContent = APP_VERSION;
 
 /* ---------- Mascotte (dessin et animation dans mascot.js) ---------- */
@@ -564,6 +569,23 @@ async function refreshCount(){ try{ $('countBadge').textContent = await photoCou
 
 /* ---------- Interface d'état ---------- */
 // tone : busy = le logiciel travaille (cadre en pointillés qui tournent) ; wait / idle = on attend l'utilisateur ; ok / err
+/* Icônes en pixel art (12 × 12, # = pixel encré, dessiné dans la couleur du texte du bouton) */
+const ICONS = {
+  calibrate: ['.....#......','...#####....','..#..#..#...','.#...#...#..','.#.......#..','###.....###.','.#.......#..','.#...#...#..','..#..#..#...','...#####....','.....#......','............'],
+  photos:    ['............','############','#..........#','#.......##.#','#.......##.#','#..........#','#...#......#','#..###..#..#','#.#####.##.#','############','............','............'],
+  settings:  ['.....##.....','..#.####.#..','.##########.','..###..###..','.###....###.','####....####','####....####','.###....###.','..###..###..','.##########.','..#.####.#..','.....##.....'],
+  fullscreen:['####....####','#..........#','#..........#','#..........#','............','............','............','............','#..........#','#..........#','#..........#','####....####'],
+  camera:    ['............','....####....','.##########.','.#........#.','.#..####..#.','.#.#....#.#.','.#.#....#.#.','.#.#....#.#.','.#..####..#.','.#........#.','.##########.','............'],
+  retry:     ['............','....####.#..','...#....##..','..#....###..','..#.........','.#..........','.#........#.','.#........#.','..#......#..','...#....#...','....####....','............'],
+  manual:    ['............','...######...','..#......#..','.#........#.','.#........#.','.#.......###','.#.......###','.#........#.','..#......#..','...######...','............','............'],
+  save:      ['#########...','#..####.##..','#..####..##.','#..####...#.','#.........#.','#.........#.','#.#######.#.','#.#.....#.#.','#.#.....#.#.','#.#.....#.#.','###########.','............']
+};
+function icon(name){
+  const rows = ICONS[name] || [], px = [];
+  rows.forEach((r, y) => [...r].forEach((ch, x) => { if (ch === '#') px.push('<rect x="' + x + '" y="' + y + '" width="1" height="1"/>'); }));
+  return '<svg viewBox="0 0 12 12" fill="currentColor" aria-hidden="true">' + px.join('') + '</svg>';
+}
+document.querySelectorAll('[data-icon]').forEach(b => b.insertAdjacentHTML('afterbegin', icon(b.dataset.icon)));
 // les textes peuvent être des fonctions (T(...)) : ils sont recalculés si la langue change
 let lastStatus = null;
 const txt = x => typeof x === 'function' ? x() : (x || '');
@@ -575,7 +597,8 @@ function setStatus(tone, big, small, actions){
   const box = $('stActions'); box.innerHTML = '';
   (actions || []).forEach(a => {
     const b = document.createElement('button');
-    b.type = 'button'; b.className = 'btn' + (a.primary ? ' primary' : ''); b.textContent = txt(a.label);
+    b.type = 'button'; b.className = 'btn ibtn' + (a.primary ? ' primary' : ''); b.innerHTML = icon(a.icon);
+    b.setAttribute('aria-label', txt(a.label)); b.title = txt(a.label);
     b.addEventListener('click', a.fn); box.appendChild(b);
   });
 }
@@ -587,7 +610,7 @@ function toast(msg){
   const t = $('toast'); t.textContent = msg; t.classList.add('show');
   clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove('show'), 3500);
 }
-const runActions = () => [{ label:T('photoNow'), fn: manualCapture }];
+const runActions = () => [{ label:T('photoNow'), icon:'camera', fn: manualCapture }];
 
 /* ---------- Caméra ---------- */
 async function startCamera(){
@@ -893,10 +916,10 @@ async function enterAuto(reason){
   mode = 'auto'; state = 'idle'; ref = null; auto = null; drawOverlay();
   if (!getDetector()){
     setStatus('err', T('noDetector'), T('noDetectorD'),
-      [{ label:T('retry'), fn: () => enterAuto() }, { label:T('manualBtn'), primary:true, fn: () => enterCalib() }]);
+      [{ label:T('retry'), icon:'retry', fn: () => enterAuto() }, { label:T('manualBtn'), icon:'manual', primary:true, fn: () => enterCalib() }]);
     return;
   }
-  setStatus('busy', T('findMarkers'), () => (reason ? t(reason) + ' ' : '') + t('keepEmpty'), [{ label:T('manualBtn'), fn: () => enterCalib() }]);
+  setStatus('busy', T('findMarkers'), () => (reason ? t(reason) + ' ' : '') + t('keepEmpty'), [{ label:T('manualBtn'), icon:'manual', fn: () => enterCalib() }]);
   // plusieurs images : un marqueur doit être vu au moins 2 fois, on garde la médiane de ses centres
   const seen = {}, need = ids => ids.every(id => seen[id] && seen[id].length >= 3);
   let frames = 0;
@@ -921,7 +944,7 @@ async function enterAuto(reason){
   if (errors.length){
     drawOverlay();
     setStatus('err', T('calibFail'), () => !Object.keys(found).length ? t('noMarkers') : errors.map(f => f.error()).join(' ') + (errors.some(f => f.few) ? ' ' + t('need3') : ''),
-      [{ label:T('retry'), primary:true, fn: () => enterAuto() }, { label:T('manualBtn'), fn: () => enterCalib() }]);
+      [{ label:T('retry'), icon:'retry', primary:true, fn: () => enterAuto() }, { label:T('manualBtn'), icon:'manual', fn: () => enterCalib() }]);
     return;
   }
   const prevLid = calib && calib.lid && calib.lid.h ? calib.lid : { h:circleToH(defaultCircles().lid) };
@@ -929,8 +952,8 @@ async function enterAuto(reason){
   drawOverlay();
   const detail = () => [t('checkCircles')].concat(fits.filter(f => f.missing.length).map(f => t('partial', { base:baseName(f.k), n:f.have.length }))).join(' ');
   setStatus('wait', T('calibFound'), detail,
-    [{ label:T('saveBtn'), primary:true, fn: () => { if (!auto || !auto.pending) return; calib = auto.pending; auto = null; startRun(false); } },
-     { label:T('retry'), fn: () => enterAuto() }, { label:T('manualBtn'), fn: () => enterCalib() }]);
+    [{ label:T('saveBtn'), icon:'save', primary:true, fn: () => { if (!auto || !auto.pending) return; calib = auto.pending; auto = null; startRun(false); } },
+     { label:T('retry'), icon:'retry', fn: () => enterAuto() }, { label:T('manualBtn'), icon:'manual', fn: () => enterCalib() }]);
 }
 // affichage du résultat : marqueurs trouvés (carrés pleins), manquants estimés (pointillés), zones projetées
 function drawAuto(){
@@ -1379,7 +1402,7 @@ document.addEventListener('pointerdown', initAudio, { once:true });
 function applyLang(){
   document.documentElement.lang = lang;
   document.querySelectorAll('[data-i18n]').forEach(e => { e.textContent = t(e.dataset.i18n); });
-  document.querySelectorAll('[data-i18n-aria]').forEach(e => e.setAttribute('aria-label', t(e.dataset.i18nAria)));
+  document.querySelectorAll('[data-i18n-aria]').forEach(e => { e.setAttribute('aria-label', t(e.dataset.i18nAria)); if (e.classList.contains('ibtn')) e.title = t(e.dataset.i18nAria); });
   const other = lang === 'en' ? 'fr' : 'en', b = $('btnLang');
   b.innerHTML = flagSvg(lang); b.setAttribute('aria-label', t('langSwitch')); b.title = t('langSwitch');
   rangeLabels.forEach(f => f());
