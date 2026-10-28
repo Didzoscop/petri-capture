@@ -457,13 +457,13 @@ body.manual .meters,body.manual .btn.lens{display:none}
 
 <div class="toast" id="toast" role="status"></div>
 
-<script src="mascot.js?v35"></script> <!-- ?vNN : à changer avec APP_VERSION, pour contourner le cache de GitHub Pages -->
-<script src="demo.js?v35"></script>
+<script src="mascot.js?v36"></script> <!-- ?vNN : à changer avec APP_VERSION, pour contourner le cache de GitHub Pages -->
+<script src="demo.js?v36"></script>
 <script>
 (() => {
 'use strict';
 const $ = id => document.getElementById(id);
-const APP_VERSION = 'v35 · 29/10'; // à incrémenter à chaque publication
+const APP_VERSION = 'v36 · 29/10'; // à incrémenter à chaque publication
 $('ver').textContent = APP_VERSION;
 
 /* ---------- Mascotte (dessin et animation dans mascot.js) ---------- */
@@ -1306,7 +1306,7 @@ function checkSocle(fix){
     calib = pendingFrom(fits); store.set(calibKey(), calib); buildMasks(); drawOverlay(); toast(t('socleMoved'));
   } else if (!fix) return false;
   else toast(t('bgAuto'));
-  takeReference().then(() => toEmpty());
+  takeReference(true).then(() => toEmpty());
   return true;
 }
 // affichage du résultat : marqueurs trouvés (carrés pleins), manquants estimés (pointillés), zones projetées
@@ -1357,26 +1357,27 @@ async function startRun(silent){
   setStatus('wait', T('ready'), placeMsg, runActions());
   if (!silent) toast(t('calibSaved'));
 }
-async function takeReference(){
+// quick : pendant la prise de vue, la caméra est déjà réglée → pas d'attente, 3 images suffisent (~0,2 s)
+async function takeReference(quick){
   refPending = true;
   setStatus('busy', T('bgMeasure'), T('keepEmpty'));
-  const n = aw*ah, acc = new Float32Array(n*3); const frames = 5;
+  const n = aw*ah, acc = new Float32Array(n*3), frames = quick ? 3 : 5;
   // au démarrage, les premières images d'un téléphone sont noires ou sombres le temps que l'exposition se règle :
   // on attend une image assez claire et stable 3 fois de suite (3 s au plus) avant de mesurer le fond vide
   let prev = null, calm = 0;
-  for (let tries = 0; tries < 30 && calm < 3; tries++){
+  for (let tries = 0; !quick && tries < 30 && calm < 3; tries++){
     actx.drawImage(video, 0, 0, aw, ah);
     const d = actx.getImageData(0, 0, aw, ah).data;
     let sum = 0, diff = 0; const L = new Float32Array(n);
     for (let i = 0; i < n; i++){ L[i] = d[i*4]*.3 + d[i*4+1]*.59 + d[i*4+2]*.11; sum += L[i]; if (prev) diff += Math.abs(L[i] - prev[i]); }
-    calm = sum / n > 20 && prev && diff / n < 2 ? calm + 1 : 0; prev = L;
+    calm = sum / n > 20 && prev && diff / n < 4 ? calm + 1 : 0; prev = L; // < 4 : tolère les vibrations d'une hotte
     if (calm < 3) await new Promise(r => setTimeout(r, 100));
   }
   for (let f = 0; f < frames; f++){
     actx.drawImage(video, 0, 0, aw, ah);
     const d = actx.getImageData(0, 0, aw, ah).data;
     for (let i = 0; i < n; i++){ acc[i*3] += d[i*4]; acc[i*3+1] += d[i*4+1]; acc[i*3+2] += d[i*4+2]; }
-    await new Promise(r => setTimeout(r, 90));
+    await new Promise(r => setTimeout(r, quick ? 60 : 90));
   }
   for (let i = 0; i < acc.length; i++) acc[i] /= frames;
   ref = acc; prevL = null; refPending = false;
@@ -1474,7 +1475,7 @@ function loop(){
   // marqueurs du socle visibles alors que la zone paraît occupée → le socle est vide, le fond de référence est faux.
   if ((state === 'empty' || state === 'wait_removal' || state === 'retry') && motionAvg < MOTION_T && now - tHeal > 3000){
     tHeal = now;
-    if (checkSocle(state !== 'empty' || a.fDish > P)) return;
+    if (checkSocle(a.fDish > P)) return; // fond repris seulement si la zone paraît occupée alors que le socle est vide
   }
   if (settings.meters){
     $('mDish').textContent = Math.round(a.fDish*100) + ' %';
@@ -1551,7 +1552,7 @@ function loop(){
 function toEmpty(){
   failStreak = 0; lockVerify = false;
   // premier socle vide après le verrouillage : on reprend le fond avec la nouvelle mise au point
-  if (refreshRef){ refreshRef = false; takeReference().then(toEmpty); return; }
+  if (refreshRef){ refreshRef = false; takeReference(true).then(toEmpty); return; }
   state = 'empty'; tEmptySince = 0; drawOverlay();
   setStatus('wait', T('ready'), placeMsg, runActions());
 }
