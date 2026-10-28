@@ -457,13 +457,13 @@ body.manual .meters,body.manual .btn.lens{display:none}
 
 <div class="toast" id="toast" role="status"></div>
 
-<script src="mascot.js?v34"></script> <!-- ?vNN : à changer avec APP_VERSION, pour contourner le cache de GitHub Pages -->
-<script src="demo.js?v34"></script>
+<script src="mascot.js?v35"></script> <!-- ?vNN : à changer avec APP_VERSION, pour contourner le cache de GitHub Pages -->
+<script src="demo.js?v35"></script>
 <script>
 (() => {
 'use strict';
 const $ = id => document.getElementById(id);
-const APP_VERSION = 'v34 · 27/10'; // à incrémenter à chaque publication
+const APP_VERSION = 'v35 · 29/10'; // à incrémenter à chaque publication
 $('ver').textContent = APP_VERSION;
 
 /* ---------- Mascotte (dessin et animation dans mascot.js) ---------- */
@@ -474,12 +474,14 @@ const video = $('video'), svg = $('overlay');
 const SVGNS = 'http://www.w3.org/2000/svg';
 
 /* ---------- Réglages persistants ---------- */
-const DEFAULTS = { sens:20, presence:20, stableMs:1000, motionTol:3.5, focusMs:1500, lockFocus:true, requireLid:true, sharpCheck:true, meters:true, sound:true, deviceId:'', zoom:1, calibMode:'aruco', lang:'en', resolution:'max', email:'', sessionGap:30, mailQuality:'medium' };
+const DEFAULTS = { v:2, sens:20, presence:20, stableMs:600, motionTol:5, focusMs:1500, lockFocus:false, requireLid:true, sharpCheck:true, meters:true, sound:true, deviceId:'', zoom:1, calibMode:'aruco', lang:'en', resolution:'max', email:'', sessionGap:30, mailQuality:'medium' };
 const store = {
   get(k, d){ try{ const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; }catch(e){ return d; } },
   set(k, v){ try{ localStorage.setItem(k, JSON.stringify(v)); }catch(e){} }
 };
 const settings = Object.assign({}, DEFAULTS, store.get('petri.settings', {}));
+// v2 : boîte tenue à la main devant le socle → plus de tolérance au mouvement, mise au point à chaque boîte
+if ((settings.v || 0) < 2){ Object.assign(settings, { v:2, stableMs:600, motionTol:5, lockFocus:false }); store.set('petri.settings', settings); }
 let curZoom = settings.zoom || 1; // zoom réellement appliqué (1 si l'objectif ne le permet pas)
 const calibKey = () => 'petri.calib' + (settings.deviceId ? '.' + settings.deviceId : '') + (curZoom > 1 ? '@' + curZoom : ''); // cadrage différent : calibration à part
 let calib = store.get(calibKey(), store.get('petri.calib', null)); // {dish:{h}, lid:{h}, aspect, source}, un par objectif (voir « Socles : géométrie »)
@@ -496,7 +498,7 @@ const I18N = {
     sPresence:'Area needed to detect', sPresenceHelp:'Share of the Dish circle that must change. Check the Dish meter with a dish in place.',
     sStable:'Wait after detection', sMotion:'Motion tolerance', sMotionHelp:'Higher accepts more motion (vibration, hands nearby). Compare with the Motion meter.',
     sFocus:'Focus time', sFocusHelp:'The sharpest frame in this time is kept.',
-    grpChecks:'Checks', cLid:'Lid base: circle and lid detection', cSharp:'Reject blurry images',
+    grpChecks:'Checks', cLid:'Lid base: include the lid circle in the photo', cSharp:'Reject blurry images',
     cLock:'Lock focus after the first photo (faster)', cMeters:'Show meters', cSound:'Sounds',
     tOk:'Test success sound', tErr:'Test error sound', grpCamera:'Camera', btnRef:'Retake empty background', btnReset:'Restore default settings', resetQ:'Restore the default detection settings? Calibration, camera, language and e-mail are kept.',
     grpCalib:'Calibration', selCalib:'Calibration mode', optAruco:'Automatic: ArUco markers', optManual:'Manual: place circles',
@@ -524,7 +526,7 @@ const I18N = {
     errRatio:'Bases differ in size: check the marker IDs.', need3:'At least 3 markers are needed in total (on either base).', noMarkers:'No markers found. Keep the base empty and well lit.',
     partial: p => p.base + ': ' + p.n + '/4 markers.',
     calibSaved:'Calibration saved.', refocus:'Blurry: refocusing.', lockFail:'Focus lock failed, autofocus kept.',
-    lockOk:'Focus locked.', bgUpdated:'Background updated.', bgAuto:'Background re-measured automatically.', lensT: p => 'Lens: ' + p.l, needCalib:' Calibration needed.',
+    lockOk:'Focus locked.', bgUpdated:'Background updated.', bgAuto:'Background re-measured automatically.', socleMoved:'Base moved: circles realigned.', lensT: p => 'Lens: ' + p.l, needCalib:' Calibration needed.',
     shared: p => plural(p.n, 'photo', 'photos') + ' sent.', shareFail: p => 'Sharing failed: ' + p.e,
     shareNA:'Gallery sharing is not available here. Use the .zip.', zipNA:'The .zip module did not load (offline?).',
     zipReady: p => 'Archive ready: ' + p.f, exportFail: p => 'Export failed: ' + p.e, noFullscreen:'Full screen is not available here.',
@@ -557,7 +559,7 @@ const I18N = {
     sPresence:'Surface occupée pour détecter', sPresenceHelp:'Part du cercle Boîte qui doit changer. Regardez la mesure Boîte avec une boîte posée.',
     sStable:'Attente après détection', sMotion:'Tolérance au mouvement', sMotionHelp:"Plus haut, l'app accepte plus de mouvement (vibrations, main proche). Comparez avec la mesure Mouvement.",
     sFocus:'Durée de mise au point', sFocusHelp:"L'app garde l'image la plus nette sur cette durée.",
-    grpChecks:'Contrôles', cLid:'Socle du couvercle : cercle et détection du couvercle', cSharp:'Refuser les images floues',
+    grpChecks:'Contrôles', cLid:'Socle du couvercle : inclure son cercle dans la photo', cSharp:'Refuser les images floues',
     cLock:'Verrouiller la mise au point après la première photo (plus rapide)', cMeters:'Afficher les mesures', cSound:'Sons',
     tOk:'Tester le son de réussite', tErr:"Tester le son d'erreur", grpCamera:'Caméra', btnRef:'Reprendre le fond vide', btnReset:'Rétablir les réglages par défaut', resetQ:'Rétablir les réglages de détection par défaut ? La calibration, la caméra, la langue et l\'e-mail sont conservés.',
     grpCalib:'Calibration', selCalib:'Mode de calibration', optAruco:'Automatique : marqueurs ArUco', optManual:'Manuel : cercles à placer',
@@ -585,7 +587,7 @@ const I18N = {
     errRatio:'Socles de tailles incohérentes : vérifiez les ID.', need3:'Il faut au moins 3 marqueurs au total, sur l\'un ou l\'autre socle.', noMarkers:'Aucun marqueur trouvé. Laissez le socle vide et bien éclairé.',
     partial: p => p.base + ' : ' + p.n + '/4 marqueurs.',
     calibSaved:'Calibration enregistrée.', refocus:'Floue : nouvelle mise au point.', lockFail:'Verrouillage raté, autofocus conservé.',
-    lockOk:'Mise au point verrouillée.', bgUpdated:'Fond vide mis à jour.', bgAuto:'Fond vide repris automatiquement.', lensT: p => 'Objectif : ' + p.l, needCalib:' Calibration nécessaire.',
+    lockOk:'Mise au point verrouillée.', bgUpdated:'Fond vide mis à jour.', bgAuto:'Fond vide repris automatiquement.', socleMoved:'Socle déplacé : cercles recalés.', lensT: p => 'Objectif : ' + p.l, needCalib:' Calibration nécessaire.',
     shared: p => plural(p.n, 'photo envoyée', 'photos envoyées') + '.', shareFail: p => 'Partage impossible : ' + p.e,
     shareNA:"Le partage vers la galerie n'est pas disponible ici. Utilisez le .zip.", zipNA:"Le module .zip n'a pas chargé (connexion ?).",
     zipReady: p => 'Archive prête : ' + p.f, exportFail: p => 'Export impossible : ' + p.e, noFullscreen:"Plein écran indisponible sur cet appareil.",
@@ -637,7 +639,7 @@ let stream = null, track = null, W = 0, H = 0;
 let mode = 'start'; // start | auto (calibration ArUco) | calib (manuelle) | run
 let state = 'idle'; // idle | empty | settling | focusing | saving | wait_removal
 let tSince = 0, tFocus = 0, tEmptySince = 0, bestSharp = 0, lastMsg = null;
-let ref = null, prevL = null, refPending = false, tStale = 0, tHeal = 0;
+let ref = null, prevL = null, refPending = false, tHeal = 0, motionAvg = 0;
 let focusLocked = false, lockSharp = 0, verifyN = 0, verifyMax = 0, lockVerify = false, refreshRef = false, focusDur = 0;
 let snap = null, tSwap = 0;
 let tRetry = 0, failStreak = 0; // nouvel essai automatique après un échec // image de la boîte photographiée, pour repérer son remplacement
@@ -866,7 +868,8 @@ document.addEventListener('visibilitychange', () => { if (document.visibilitySta
    en millimètres (centre du cercle = origine, nord = +Y) vers l'image, en fractions de la largeur et de la hauteur.
    Calibration automatique : homographie (4 marqueurs) ou affine (3) ; manuelle : cercle = simple mise à l'échelle. */
 const SOCLE_R = 51.5;            // rayon du socle (103 mm)
-const ZONE_K = .9;               // zone de détection affichée et analysée : 90 % du socle, marge contre les petites déformations
+const ZONE_K = .75;              // zone de détection affichée et analysée : 75 % du socle (77 mm), plus petite qu'une boîte de 90 mm :
+                                 // une boîte posée ou tenue devant la couvre entièrement, ses bords et les doigts restent en dehors
 const MARK_D = 35.75;            // distance centre du socle → centre d'un marqueur
 const MARK_POS = [[0, MARK_D], [MARK_D, 0], [0, -MARK_D], [-MARK_D, 0]]; // ID % 4 : nord, est, sud, ouest
 const SOCLE_IDS = { dish:[0, 1, 2, 3], lid:[4, 5, 6, 7] };
@@ -1118,6 +1121,13 @@ function detectRegion(src, sw, sh, rx, ry, rw, rh, w, k, out){
 const DETECT_PASSES = [[2000, 3], [1400, 3], [2000, 2], [1000, 3]];
 function detectMarkers(src, sw, sh){
   const out = {}, done = () => Object.keys(out).length >= (lidOn() ? 8 : 4), tried = {};
+  // les socles sont presque toujours au centre : on cherche d'abord dans le centre de l'image (moins de pixels à traiter),
+  // puis dans un cadre plus grand, enfin dans toute l'image
+  for (const f of [.55, .8]){
+    const rw = sw*f, rh = sh*f;
+    detectRegion(src, sw, sh, (sw - rw)/2, (sh - rh)/2, rw, rh, Math.round(Math.min(2000, rw)), 3, out);
+    if (done()) return out;
+  }
   for (const [maxW, k] of DETECT_PASSES){
     const w = Math.round(sw * Math.min(1, maxW / sw));
     if (tried[w + '/' + k]) continue; tried[w + '/' + k] = 1;
@@ -1201,7 +1211,7 @@ async function enterAuto(reason){
   }
   setStatus('busy', T('findMarkers'), () => (reason ? t(reason) + ' ' : '') + t('keepEmpty'), [{ label:T('manualBtn'), fn: () => enterCalib() }]);
   // plusieurs images : un marqueur doit être vu au moins 2 fois, on garde la médiane de ses centres
-  const seen = {}, need = ids => ids.every(id => seen[id] && seen[id].length >= 3);
+  const seen = {}, need = ids => ids.every(id => seen[id] && seen[id].length >= 2);
   let frames = 0;
   for (; frames < 10; frames++){
     await new Promise(r => setTimeout(r, 120));
@@ -1210,10 +1220,32 @@ async function enterAuto(reason){
       const f = detectMarkers(video, W, H);
       for (const id in f) (seen[id] = seen[id] || []).push(f[id]);
     }catch(e){}
-    if (frames >= 3 && need(SOCLE_IDS.dish) && (!lidOn() || need(SOCLE_IDS.lid))) break;
+    if (frames >= 1 && need(SOCLE_IDS.dish) && (!lidOn() || need(SOCLE_IDS.lid))) break;
   }
   const found = {};
   for (const id in seen) if (seen[id].length >= 2) found[id] = { x:median(seen[id].map(p => p.x)), y:median(seen[id].map(p => p.y)) };
+  const fits = computeFits(found);
+  auto = { found, fits };
+  const errors = fits.filter(f => f.error);
+  if (errors.length){
+    drawOverlay();
+    setStatus('err', T('calibFail'), () => !Object.keys(found).length ? t('noMarkers') : errors.map(f => f.error()).join(' ') + (errors.some(f => f.few) ? ' ' + t('need3') : ''),
+      [{ label:T('retry'), primary:true, fn: () => enterAuto() }, { label:T('manualBtn'), fn: () => enterCalib() }]);
+    return;
+  }
+  auto.pending = pendingFrom(fits);
+  drawOverlay();
+  const detail = () => [t('checkCircles')].concat(fits.filter(f => f.missing.length).map(f => t('partial', { base:baseName(f.k), n:f.have.length }))).join(' ');
+  setStatus('wait', T('calibFound'), detail,
+    [{ label:T('saveBtn'), primary:true, fn: () => { if (!auto || !auto.pending) return; calib = auto.pending; auto = null; startRun(false); } },
+     { label:T('retry'), fn: () => enterAuto() }, { label:T('manualBtn'), fn: () => enterCalib() }]);
+}
+const pendingFrom = fits => {
+  const prevLid = calib && calib.lid && calib.lid.h ? calib.lid : { h:circleToH(defaultCircles().lid) };
+  return { dish:{ h:fits[0].h }, lid: lidOn() ? { h:fits[1].h } : prevLid, aspect:W/H, source:'aruco' };
+};
+// transformations des socles à partir des marqueurs trouvés { id: {x, y} }
+function computeFits(found){
   let fits = circleKeys().map(k => fitSocle(k, found));
   if (fits.length === 2 && !fits[0].error && !fits[1].error && fits[0].have.length === 4 && fits[1].have.length === 4){
     // les deux socles vus en entier : on retient l'écart entre leurs centres pour les fois suivantes
@@ -1240,21 +1272,42 @@ async function enterAuto(reason){
     const ratio = fits[0].scale / fits[1].scale;
     if (ratio < .6 || ratio > 1.65) fits[1].error = T('errRatio');
   }
-  auto = { found, fits };
-  const errors = fits.filter(f => f.error);
-  if (errors.length){
-    drawOverlay();
-    setStatus('err', T('calibFail'), () => !Object.keys(found).length ? t('noMarkers') : errors.map(f => f.error()).join(' ') + (errors.some(f => f.few) ? ' ' + t('need3') : ''),
-      [{ label:T('retry'), primary:true, fn: () => enterAuto() }, { label:T('manualBtn'), fn: () => enterCalib() }]);
-    return;
-  }
-  const prevLid = calib && calib.lid && calib.lid.h ? calib.lid : { h:circleToH(defaultCircles().lid) };
-  auto.pending = { dish:{ h:fits[0].h }, lid: lidOn() ? { h:fits[1].h } : prevLid, aspect:W/H, source:'aruco' };
-  drawOverlay();
-  const detail = () => [t('checkCircles')].concat(fits.filter(f => f.missing.length).map(f => t('partial', { base:baseName(f.k), n:f.have.length }))).join(' ');
-  setStatus('wait', T('calibFound'), detail,
-    [{ label:T('saveBtn'), primary:true, fn: () => { if (!auto || !auto.pending) return; calib = auto.pending; auto = null; startRun(false); } },
-     { label:T('retry'), fn: () => enterAuto() }, { label:T('manualBtn'), fn: () => enterCalib() }]);
+  return fits;
+}
+// Contrôle rapide : on ne cherche les marqueurs que dans un cadre autour de chaque socle, à une taille où un marqueur
+// fait ~36 px (quelques millisecondes au lieu de plusieurs secondes pour toute l'image).
+function quickMarkers(){
+  const out = {};
+  circleKeys().forEach(k => {
+    const z = zonePx(calib[k].h), half = Math.max(z.x1 - z.x0, z.y1 - z.y0) * .65;
+    const rx = Math.max(0, z.cx - half), ry = Math.max(0, z.cy - half), rw = Math.min(W, z.cx + half) - rx, rh = Math.min(H, z.cy + half) - ry;
+    if (rw < 20 || rh < 20) return;
+    const markerPx = (z.x1 - z.x0) * 10 / (2*SOCLE_R), s = Math.min(2, Math.max(.3, 36 / Math.max(1, markerPx)));
+    const w = Math.round(rw * s);
+    [3, 2].forEach(kk => { if (SOCLE_IDS[k].some(id => !out[id])) detectRegion(video, W, H, rx, ry, rw, rh, w, kk, out); });
+  });
+  return out;
+}
+// Socle vide ? (3 marqueurs de la boîte lisibles). Si oui : recalage des cercles si le socle a bougé et, si fix est vrai
+// (la zone paraissait occupée), reprise du fond de référence. Renvoie vrai si l'app a dû agir (pas de photo à prendre).
+function checkSocle(fix){
+  let f;
+  try{ f = quickMarkers(); }catch(e){ return false; }
+  if (SOCLE_IDS.dish.filter(id => f[id]).length < 3) return false; // boîte présente (ou marqueurs cachés) : rien à faire
+  // écart entre les marqueurs vus et leur place attendue, comparé à la taille d'un marqueur
+  const z = zonePx(calib.dish.h), markerPx = (z.x1 - z.x0) * 10 / (2*SOCLE_R);
+  let moved = 0;
+  for (const id in f){ const k = id < 4 ? 'dish' : 'lid'; if (!calib[k] || !calib[k].h) continue;
+    const e = project(calib[k].h, MARK_POS[id % 4][0], MARK_POS[id % 4][1]);
+    moved = Math.max(moved, Math.hypot((f[id].x - e.x)*W, (f[id].y - e.y)*H) / markerPx); }
+  if (moved > .25){
+    const fits = computeFits(f);
+    if (fits.some(x => x.error)) return false; // pas assez de marqueurs pour recaler : on n'y touche pas
+    calib = pendingFrom(fits); store.set(calibKey(), calib); buildMasks(); drawOverlay(); toast(t('socleMoved'));
+  } else if (!fix) return false;
+  else toast(t('bgAuto'));
+  takeReference().then(() => toEmpty());
+  return true;
 }
 // affichage du résultat : marqueurs trouvés (carrés pleins), manquants estimés (pointillés), zones projetées
 function drawAuto(){
@@ -1333,10 +1386,14 @@ async function takeReference(){
 function analyse(){
   actx.drawImage(video, 0, 0, aw, ah);
   const d = actx.getImageData(0, 0, aw, ah).data, n = aw*ah;
-  // compensation d'exposition globale à partir de la zone hors cercles
-  let sc = 0, sr = 0;
-  for (let j = 0; j < idxOut.length; j++){ const i = idxOut[j], p = i*4, q = i*3; sc += d[p]+d[p+1]+d[p+2]; sr += ref[q]+ref[q+1]+ref[q+2]; }
-  let gain = (idxOut.length > 40 && sr > 0) ? sc / sr : 1;
+  // compensation d'exposition à partir de la zone hors cercles : médiane des rapports pixel à pixel,
+  // juste même si un bras ou une main en cache une bonne partie
+  let gain = 1;
+  if (idxOut.length > 40){
+    const r = [];
+    for (let j = 0; j < idxOut.length; j += 3){ const i = idxOut[j], p = i*4, q = i*3, b = ref[q] + ref[q+1] + ref[q+2]; if (b > 30) r.push((d[p] + d[p+1] + d[p+2]) / b); }
+    if (r.length > 20) gain = median(r);
+  }
   gain = Math.min(2, Math.max(.5, gain));
   const T = settings.sens;
   const frac = idx => {
@@ -1349,12 +1406,12 @@ function analyse(){
     }
     return c / idx.length;
   };
-  const fDish = frac(idxDish), fLid = frac(idxLid), fOut = frac(idxOut);
+  const fDish = frac(idxDish), fLid = frac(idxLid);
   let motion = 0;
   const L = new Float32Array(n);
   for (let i = 0; i < n; i++){ L[i] = (d[i*4]*.3 + d[i*4+1]*.59 + d[i*4+2]*.11); if (prevL) motion += Math.abs(L[i] - prevL[i]); }
   motion = prevL ? motion / n : 0; prevL = L;
-  return { d, fDish, fLid, fOut, motion };
+  return { d, fDish, fLid, motion };
 }
 
 function dishPixels(d){
@@ -1389,8 +1446,8 @@ function sharpness(){
   const m = s/k; return s2/k - m*m;
 }
 function cropRect(){
-  // encadrement des zones projetées, agrandi de 8 % autour de chaque centre
-  const zs = (lidOn() ? ['dish','lid'] : ['dish']).map(k => zonePx(calib[k].h)), pad = 1.08;
+  // encadrement des socles, agrandi de 25 % autour de chaque centre : une boîte tenue devant le socle paraît plus grande
+  const zs = (lidOn() ? ['dish','lid'] : ['dish']).map(k => zonePx(calib[k].h)), pad = 1.25;
   let x0 = Math.min(...zs.map(z => z.cx - (z.cx - z.x0)*pad)), y0 = Math.min(...zs.map(z => z.cy - (z.cy - z.y0)*pad));
   let x1 = Math.max(...zs.map(z => z.cx + (z.x1 - z.cx)*pad)), y1 = Math.max(...zs.map(z => z.cy + (z.y1 - z.cy)*pad));
   x0 = Math.max(0, Math.floor(x0)); y0 = Math.max(0, Math.floor(y0));
@@ -1412,26 +1469,21 @@ function loop(){
   loopTimer = setTimeout(loop, 120);
   if (mode !== 'run' || !ref || refPending || !video.videoWidth || state === 'saving') return;
   const a = analyse(), now = performance.now(), P = settings.presence / 100;
-  // Fond de référence faux (image sombre au démarrage, lumière très différente…) : tout l'extérieur des socles a changé.
-  // On ne reprend le fond que si les marqueurs du socle de la boîte sont visibles, c.-à-d. si aucune boîte n'est posée.
-  const stale = a.fOut > .5; // aucune prise de vue tant que c'est le cas
-  if (!stale || a.motion >= MOTION_T || state === 'focusing') tStale = 0; // la reprise attend une image immobile
-  else if (!tStale) tStale = now;
-  else if (now - tStale > 1500 && now - tHeal > 2500){
+  motionAvg = motionAvg*.6 + a.motion*.4; // mouvement lissé : une main qui tient une boîte tremble toujours un peu
+  // Contrôle rapide des marqueurs quand l'image est calme (toutes les 3 s) : socle déplacé → cercles recalés ;
+  // marqueurs du socle visibles alors que la zone paraît occupée → le socle est vide, le fond de référence est faux.
+  if ((state === 'empty' || state === 'wait_removal' || state === 'retry') && motionAvg < MOTION_T && now - tHeal > 3000){
     tHeal = now;
-    let seen = 0;
-    try{ const f = detectMarkers(video, W, H); seen = SOCLE_IDS.dish.filter(id => f[id]).length; }catch(e){}
-    if (seen >= 3){ tStale = 0; takeReference().then(() => { toEmpty(); toast(t('bgAuto')); }); return; }
+    if (checkSocle(state !== 'empty' || a.fDish > P)) return;
   }
   if (settings.meters){
     $('mDish').textContent = Math.round(a.fDish*100) + ' %';
-    $('mLid').textContent = lidOn() ? Math.round(a.fLid*100) + ' %' : '–';
+    $('mLid').textContent = '–'; // le couvercle, transparent, n'est pas détecté : seule la boîte compte
     $('mMotion').textContent = a.motion.toFixed(1);
   }
   switch (state){
     case 'empty':
-      // (fond faux : pas de prise de vue tant qu'il n'est pas repris)
-      if (a.fDish > P && !stale){ state = 'settling'; tSince = now; sounds.tick(); drawOverlay();
+      if (a.fDish > P){ state = 'settling'; tSince = now; sounds.tick(); drawOverlay();
         setStatus('busy', T('detected'), T('holdStill'), runActions()); }
       else if (a.fDish < P*.3 && a.motion < 1.2){
         // adaptation lente aux variations de lumière
@@ -1439,9 +1491,13 @@ function loop(){
       }
       break;
     case 'settling':
-      if (a.fDish < P*.5 || stale){ toEmpty(); break; }
-      if (a.motion > MOTION_T) tSince = now;
-      if (now - tSince >= settings.stableMs) beginFocus(now);
+      if (a.fDish < P*.5){ toEmpty(); break; }
+      if (motionAvg > MOTION_T) tSince = now;
+      if (now - tSince >= settings.stableMs){
+        // dernier contrôle avant la photo : si les marqueurs du socle sont lisibles, il n'y a pas de boîte (fond faux)
+        if (checkSocle(true)) break;
+        beginFocus(now);
+      }
       break;
     case 'focusing': {
       // les images prises pendant un mouvement sont ignorées au lieu de faire échouer la prise
@@ -1451,7 +1507,6 @@ function loop(){
         if (s > bestSharp){ bestSharp = s; grabBest(); }
       }
       if (now - tFocus >= focusDur){
-        if (stale){ toEmpty(); break; } // le fond de référence est faux : pas de photo d'un socle peut-être vide
         if (bestSharp < 0){ // aucune image immobile : on attend encore un peu
           if (now - tFocus >= focusDur + 1500) fail(T('failMoved'), T('failMovedD'));
           break;
@@ -1459,7 +1514,6 @@ function loop(){
         // double contrôle : avec la mise au point verrouillée, l'image doit rester aussi nette qu'à la première photo
         // (la netteté dépend du contenu de chaque boîte : on ne refait la mise au point que pour une image vraiment floue)
         if (focusLocked){ const m = medianSharp(); if (m > 0 && bestSharp < m*.45){ unlockFocus(); toast(t('refocus')); beginFocus(now); break; } }
-        if (settings.requireLid && a.fLid < P*.5){ fail(T('failLid'), T('failLidD')); break; }
         const med = medianSharp();
         if (!focusLocked && settings.sharpCheck && med > 0 && bestSharp < med*.45){ fail(T('failBlur'), T('failBlurD', { v:Math.round(bestSharp), m:Math.round(med) })); break; }
         save();
@@ -1481,11 +1535,12 @@ function loop(){
           else toast(t('lockOk'));
         }
       }
-      if (a.fDish < P*.5){ if (!tEmptySince) tEmptySince = now; if (now - tEmptySince > 600){ snap = null; toEmpty(); } break; }
+      if (a.fDish < P*.5){ if (!tEmptySince) tEmptySince = now; if (now - tEmptySince > 400){ snap = null; toEmpty(); } break; }
       tEmptySince = 0;
-      if (!snap){ if (a.motion < MOTION_T){ snap = dishPixels(a.d); tSwap = 0; } break; }
-      // boîte remplacée sans passer par un socle vide : la zone a changé par rapport à la photo précédente
-      if (changedFrac(a.d, snap) > P && a.motion < MOTION_T){
+      if (!snap){ if (motionAvg < MOTION_T){ snap = dishPixels(a.d); tSwap = 0; } break; }
+      // boîte remplacée sans passer par un socle vide : la zone a beaucoup changé par rapport à la photo précédente
+      // (seuil élevé : une boîte tenue à la main bouge un peu sans être une nouvelle boîte)
+      if (changedFrac(a.d, snap) > Math.max(P, .6) && motionAvg < MOTION_T){
         if (!tSwap) tSwap = now;
         if (now - tSwap > 400){ snap = null; state = 'settling'; tSince = now; sounds.tick(); drawOverlay();
           setStatus('busy', T('newDish'), T('holdStill'), runActions()); }
