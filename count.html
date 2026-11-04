@@ -332,7 +332,7 @@ dialog.pix .row{display:flex;justify-content:flex-end;margin-top:1rem;padding:0 
 (() => {
 'use strict';
 const $ = id => document.getElementById(id);
-const VERSION = 'v18 · 05/11';
+const VERSION = 'v19 · 05/11';
 const SAVE_FILE = 'petri-comptage.json';
 const IMG_RE = /\.(jpe?g|png|webp|gif|bmp|avif)$/i;
 const canWriteFolder = typeof window.showDirectoryPicker === 'function'; // Chrome, Edge : lecture et écriture dans le dossier
@@ -351,7 +351,7 @@ const I18N = {
     hint:'Left click: add or remove a colony · wheel: zoom · hold right click: move · ← →: image',
     undo:'Undo', redo:'Redo', prefix:'Prefix', prefixPh:'e.g. 2026-11-04_E.coli', scopeOne:'This one', scopeAll:'All',
     prefixAllQ: p => p.v ? 'Apply the prefix “' + p.v + '” to all images?' : 'Remove the prefix from all images?',
-    prefixAllD: p => p.n + ' image(s) already opened will get this prefix. The ↶ ↷ arrows on this image can undo it.', apply:'Apply',
+    prefixAllD: p => 'All ' + p.n + ' images of the folder will get this prefix, including those not opened yet. The ↶ ↷ arrows on this image can undo it.', apply:'Apply',
     group:'Group', groupPh:'New group…', dilution:'Dilution', dilPh:'e.g. 1:10', newDil:'New dilution', add:'Add', name:'Name', namePh:'e.g. 10-3', results:'Results', colName:'Name', graph:'Graph', noGroup:'No group', copyGraph:'Copy the graph', graphCopied:'Graph copied to the clipboard.', copyFail:'Could not copy the graph.',
     graphEmpty:'Tick a group for the counted images to see the mean count per group.',
     graphTip: p => p.g + ': mean ' + p.m + ' CFU (SD ' + p.sd + ', n = ' + p.n + ')',
@@ -514,7 +514,7 @@ async function load(name, list, saved){
   if (!files.length){ toast(t('noImages')); showEmpty(true); renderTable(); return; }
   toast(saved || local ? t('loaded', { n:files.length }) : t('found', { n:files.length }));
   // reprend à la première image pas encore comptée
-  const first = files.findIndex(f => !data.images[f.name]);
+  const first = files.findIndex(f => !data.images[f.name] || data.images[f.name].pending);
   await show(first < 0 ? 0 : first);
 }
 // dossier rouvrable au prochain lancement (Chrome, Edge) : le lien vers le dossier est gardé dans IndexedDB
@@ -562,6 +562,7 @@ async function show(i){
   const f = files[idx];
   // nouvelle image : préfixe et groupe repris, nom vidé
   if (!data.images[f.name]) data.images[f.name] = { prefix:lastPrefix, group:lastGroup, dilution:lastDilution, name:'', marks:[] };
+  else if (data.images[f.name].pending){ const p = data.images[f.name]; p.group = lastGroup; p.dilution = lastDilution; delete p.pending; } // ouverte pour la 1re fois
   const r = rec();
   $('inPrefix').value = r.prefix; $('inName').value = r.name; // revoir une image ne change pas ce qui est reporté sur les suivantes
   const file = f.file || await f.handle.getFile();
@@ -646,6 +647,11 @@ function clickAt(cx, cy){
 function doOp(a, reverse){
   if (a.op === 'prefixAll'){
     for (const k in a.before) if (data.images[k]) data.images[k].prefix = reverse ? a.before[k] : a.value;
+    // images pas encore ouvertes : entrée « en attente » (préfixe seul), retirée à l'annulation si toujours pas ouverte
+    (a.created || []).forEach(k => {
+      if (reverse){ if (data.images[k] && data.images[k].pending) delete data.images[k]; }
+      else if (!data.images[k]) data.images[k] = { prefix:a.value, group:'', dilution:'', name:'', marks:[], pending:true };
+    });
     const r = rec(); if (r){ lastPrefix = r.prefix; $('inPrefix').value = r.prefix; }
     return;
   }
@@ -664,7 +670,9 @@ $('inPrefix').addEventListener('input', e => { const r = rec(); if (!r) return; 
 $('inName').addEventListener('input', e => { const r = rec(); if (!r) return; r.name = e.target.value; changed(); });
 // Portée du préfixe : la case cochée reflète l'état réel. « Toutes les images » est cochée quand toutes les images
 // ouvertes partagent ce préfixe ; taper un autre préfixe ne change que l'image en cours (et les suivantes, nouvelles).
-const allSamePrefix = () => { const recs = Object.values(data.images), r = rec(); return !!r && !!(r.prefix || '').trim() && recs.length > 1 && recs.every(x => (x.prefix || '') === r.prefix); }; // pas coché tant qu'aucun préfixe n'est saisi
+// « All » coché quand toutes les images ouvertes ont ce préfixe (même s'il n'y en a qu'une : les suivantes le recevront) ;
+// pas coché tant qu'aucun préfixe n'est saisi
+const allSamePrefix = () => { const recs = Object.values(data.images), r = rec(); return !!r && !!(r.prefix || '').trim() && recs.every(x => (x.prefix || '') === r.prefix); };
 function renderScope(){
   const box = $('prefixScope'), all = allSamePrefix(); box.innerHTML = '';
   [['one', t('scopeOne'), !all], ['all', t('scopeAll'), all]].forEach(([k, label, on]) => {
@@ -677,10 +685,11 @@ function renderScope(){
 }
 async function prefixToAll(){
   const r = rec(); if (!r || allSamePrefix()) return;
-  const v = (r.prefix || '').trim(), n = Object.keys(data.images).length;
+  const v = (r.prefix || '').trim(), n = files.length;
   if (!(await ask(t('prefixAllQ', { v }), t('prefixAllD', { n }), t('apply'), t('cancel')))) return;
-  const before = {}; for (const k in data.images) before[k] = data.images[k].prefix || '';
-  apply({ op:'prefixAll', value:r.prefix || '', before }); // annulable avec ↶ sur cette image
+  const before = {}, created = files.filter(f => !data.images[f.name]).map(f => f.name);
+  for (const k in data.images) before[k] = data.images[k].prefix || '';
+  apply({ op:'prefixAll', value:r.prefix || '', before, created }); // annulable avec ↶ sur cette image
 }
 // Groupes et dilutions : même fonctionnement (liste à cocher, « + » pour en ajouter, reportés sur les images suivantes)
 const LISTS = {
@@ -835,11 +844,12 @@ function renderTable(){
   const tb = $('rows'); if (!tb) return;
   tb.innerHTML = '';
   files.forEach((f, i) => {
-    const r = data.images[f.name], tr = document.createElement('tr');
+    const r = data.images[f.name], tr = document.createElement('tr'), open = r && !r.pending;
     tr.className = 'row' + (i === idx ? ' cur' : '');
-    const name = finalName(r), td1 = document.createElement('td'), td2 = document.createElement('td');
-    if (name) td1.textContent = name; else { td1.textContent = stem(f.name); td1.className = 'unnamed'; }
-    td2.className = 'n'; td2.textContent = r ? r.marks.length : '–';
+    const name = open ? finalName(r) : '', td1 = document.createElement('td'), td2 = document.createElement('td');
+    if (name) td1.textContent = name;
+    else { td1.textContent = r && r.pending && (r.prefix || '').trim() ? r.prefix.trim() + S.sep + stem(f.name) : stem(f.name); td1.className = 'unnamed'; } // pas encore ouverte : en gris
+    td2.className = 'n'; td2.textContent = open ? r.marks.length : '–';
     tr.append(td1, td2); tr.addEventListener('click', () => show(i)); tb.appendChild(tr);
   });
 }
@@ -858,7 +868,7 @@ function renderAll(){
 function csvText(){
   const sep = S.csvSep, q = v => (v.includes(sep) || /["\n]/.test(v)) ? '"' + v.replace(/"/g, '""') + '"' : v;
   const lines = [[t('colName'), 'CFU', 'Dilution', 'Image'].join(sep)];
-  files.forEach(f => { const r = data.images[f.name]; if (r) lines.push([q(finalName(r) || stem(f.name)), r.marks.length, q(r.dilution || ''), q(f.name)].join(sep)); });
+  files.forEach(f => { const r = data.images[f.name]; if (r && !r.pending) lines.push([q(finalName(r) || stem(f.name)), r.marks.length, q(r.dilution || ''), q(f.name)].join(sep)); });
   return '\ufeff' + lines.join('\r\n') + '\r\n'; // BOM : les accents s'affichent correctement dans Excel
 }
 const csvName = () => 'comptage_' + folder.replace(/[^\w.-]+/g, '_') + '.csv';
@@ -966,7 +976,7 @@ function summaryPage(doc, header, { PW, PH, M, CW }){
 }
 async function buildReport(exp, desc, withGraph){
   const { jsPDF } = window.jspdf, doc = new jsPDF({ unit:'mm', format:'a4', orientation:'portrait' });
-  const PW = 210, PH = 297, M = 15, CW = PW - 2*M, items = files.filter(f => data.images[f.name]);
+  const PW = 210, PH = 297, M = 15, CW = PW - 2*M, items = files.filter(f => data.images[f.name] && !data.images[f.name].pending);
   const date = new Date().toLocaleDateString('en-GB', { year:'numeric', month:'long', day:'numeric' });
   const header = () => {
     doc.setFont('helvetica', 'bold'); doc.setFontSize(11); doc.setTextColor(0);
