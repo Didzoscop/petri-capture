@@ -56,7 +56,9 @@ input[type=text]:focus{outline:none;background:#fff}
 .folder{font-size:.9rem;color:var(--muted);max-width:22rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:inline-flex;align-items:center;gap:.4rem}
 .folder svg{width:26px;height:22px;flex:none;shape-rendering:crispEdges}
 .folder span{overflow:hidden;text-overflow:ellipsis}
-.frame{position:relative;flex:1;min-height:0;padding:6px;background:var(--ink);box-shadow:8px 8px 0 rgba(26,26,26,.16)}
+/* aperçu toujours en 16:9 (format des photos de Petri-capture), le plus grand possible dans la place disponible */
+.stage{flex:1;min-height:0;container-type:size;display:grid;place-items:center}
+.frame{position:relative;box-sizing:content-box;width:min(100cqw - 22px, (100cqh - 22px) * 16 / 9);aspect-ratio:16/9;padding:6px;background:var(--ink);box-shadow:8px 8px 0 rgba(26,26,26,.16)}
 .screen{position:absolute;inset:6px;overflow:hidden;background:var(--viewer);cursor:crosshair;touch-action:none;user-select:none}
 .screen.panning{cursor:grabbing}
 .pan{position:absolute;left:0;top:0;transform-origin:0 0}
@@ -179,7 +181,7 @@ dialog.pix .row{display:flex;justify-content:flex-end;margin-top:1rem;padding:0 
     <button class="btn" id="btnSettings" type="button" data-i18n="settings"></button>
     <button class="flag" id="btnLang" type="button"></button>
   </div>
-  <div class="frame">
+  <div class="stage"><div class="frame">
     <div class="screen" id="screen">
       <div class="pan" id="pan" hidden><img id="img" alt=""><svg id="marks" xmlns="http://www.w3.org/2000/svg"></svg></div>
       <div class="empty" id="empty">
@@ -197,7 +199,7 @@ dialog.pix .row{display:flex;justify-content:flex-end;margin-top:1rem;padding:0 
       </div>
       <div class="zoomhint" id="zoomhint" hidden data-i18n="hint"></div>
     </div>
-  </div>
+  </div></div>
   <div class="nav">
     <button class="btn" id="btnPrev" type="button" disabled>◀ <span data-i18n="prev"></span></button>
     <div class="file"><b id="fileName">–</b><span id="fileIdx"></span></div>
@@ -278,7 +280,7 @@ dialog.pix .row{display:flex;justify-content:flex-end;margin-top:1rem;padding:0 
 (() => {
 'use strict';
 const $ = id => document.getElementById(id);
-const VERSION = 'v9 · 04/11';
+const VERSION = 'v10 · 04/11';
 const SAVE_FILE = 'petri-comptage.json';
 const IMG_RE = /\.(jpe?g|png|webp|gif|bmp|avif)$/i;
 const canWriteFolder = typeof window.showDirectoryPicker === 'function'; // Chrome, Edge : lecture et écriture dans le dossier
