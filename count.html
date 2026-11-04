@@ -249,6 +249,10 @@ dialog.pix .row{display:flex;justify-content:flex-end;margin-top:1rem;padding:0 
 <dialog class="pix" id="askDlg">
   <h2 id="askTitle"></h2>
   <p id="askText"></p>
+  <div id="askTypeBox" hidden>
+    <label class="lbl" for="askType" id="askTypeLbl" style="text-transform:none;letter-spacing:0"></label>
+    <input type="text" id="askType" autocomplete="off" spellcheck="false">
+  </div>
   <div class="row" style="gap:.7rem"><button class="btn" id="askNo" type="button"></button><button class="btn primary" id="askYes" type="button"></button></div>
 </dialog>
 
@@ -274,7 +278,7 @@ dialog.pix .row{display:flex;justify-content:flex-end;margin-top:1rem;padding:0 
 (() => {
 'use strict';
 const $ = id => document.getElementById(id);
-const VERSION = 'v8 · 04/11';
+const VERSION = 'v9 · 04/11';
 const SAVE_FILE = 'petri-comptage.json';
 const IMG_RE = /\.(jpe?g|png|webp|gif|bmp|avif)$/i;
 const canWriteFolder = typeof window.showDirectoryPicker === 'function'; // Chrome, Edge : lecture et écriture dans le dossier
@@ -301,7 +305,8 @@ const I18N = {
     expName:"Nom de l'expérience", expDesc:'Courte description', required:'obligatoire', optional:'facultatif', cancel:'Annuler', create:'Créer le rapport',
     pdfEnglish:'Le rapport est rédigé en anglais, pour pouvoir être transmis tel quel.',
     folderData:'Comptes de ce dossier', wipe:'Effacer tous les comptes de ce dossier',
-    wipeTitle:'Tout effacer ?', wipeText: p => 'Les comptes, les noms et les groupes du dossier « ' + p.f + ' » seront supprimés (fichier ' + p.s + ' et copie du navigateur). Les photos ne sont pas touchées.',
+    wipeTitle:'Tout effacer ?', wipeText: p => 'Les comptes, les noms et les groupes du dossier « ' + p.f + ' » seront supprimés (fichier ' + p.s + ' et copie du navigateur). Cette action est définitive : ils ne pourront pas être récupérés. Les photos ne sont pas touchées.',
+    typeWord: p => 'Tapez « ' + p.w + ' » pour confirmer',
     wipeYes:'Effacer', wiped:'Comptes effacés.', noFolder:"Choisissez d'abord un dossier.",
     restoreTitle:'Copie trouvée dans le navigateur', restoreText: p => 'Le dossier ne contient pas de sauvegarde (' + p.s + '), mais le navigateur en a gardé une copie (' + p.n + ' image(s) comptée(s)). La reprendre ?',
     restoreYes:'Reprendre la copie', restoreNo:'Repartir de zéro',
@@ -325,7 +330,8 @@ const I18N = {
     expName:'Experiment name', expDesc:'Short description', required:'required', optional:'optional', cancel:'Cancel', create:'Create report',
     pdfEnglish:'The report is written in English so it can be shared as is.',
     folderData:'Counts for this folder', wipe:'Erase all counts for this folder',
-    wipeTitle:'Erase everything?', wipeText: p => 'Counts, names and groups for the folder “' + p.f + '” will be deleted (' + p.s + ' file and browser copy). The photos are not touched.',
+    wipeTitle:'Erase everything?', wipeText: p => 'Counts, names and groups for the folder “' + p.f + '” will be deleted (' + p.s + ' file and browser copy). This cannot be undone: they cannot be recovered. The photos are not touched.',
+    typeWord: p => 'Type “' + p.w + '” to confirm',
     wipeYes:'Erase', wiped:'Counts erased.', noFolder:'Choose a folder first.',
     restoreTitle:'Copy found in the browser', restoreText: p => 'The folder has no save file (' + p.s + '), but the browser kept a copy (' + p.n + ' image(s) counted). Restore it?',
     restoreYes:'Restore the copy', restoreNo:'Start from scratch',
@@ -397,7 +403,7 @@ $('btnSettings').addEventListener('click', () => { buildSettings(); $('setDlg').
 $('setClose').addEventListener('click', () => $('setDlg').close());
 $('btnWipe').addEventListener('click', async () => {
   if (!folder){ toast(t('noFolder')); return; }
-  if (!(await ask(t('wipeTitle'), t('wipeText', { f:folder, s:SAVE_FILE }), t('wipeYes'), t('cancel')))) return;
+  if (!(await ask(t('wipeTitle'), t('wipeText', { f:folder, s:SAVE_FILE }), t('wipeYes'), t('cancel'), 'erase'))) return;
   clearTimeout(saveTimer); await saving;
   try{ localStorage.removeItem(localKey()); }catch(e){}
   if (dir){ try{ await dir.removeEntry(SAVE_FILE); }catch(e){} }
@@ -407,13 +413,19 @@ $('btnWipe').addEventListener('click', async () => {
   if (files.length) await show(keepIdx);
 });
 
-// question avec deux réponses, dans le style du site ; résout à vrai pour « oui »
-function ask(title, text, yes, no){
+// question avec deux réponses, dans le style du site ; résout à vrai pour « oui ».
+// word : mot à taper pour pouvoir confirmer (actions définitives)
+function ask(title, text, yes, no, word){
   return new Promise(res => {
     const d = $('askDlg'); $('askTitle').textContent = title; $('askText').textContent = text; $('askYes').textContent = yes; $('askNo').textContent = no;
-    const done = v => { $('askYes').onclick = $('askNo').onclick = d.oncancel = null; d.close(); res(v); };
+    const box = $('askTypeBox'), inp = $('askType'), yesB = $('askYes');
+    box.hidden = !word; inp.value = ''; yesB.disabled = !!word;
+    yesB.className = 'btn ' + (word ? 'danger' : 'primary'); // action définitive : bouton rouge
+    if (word){ $('askTypeLbl').textContent = t('typeWord', { w:word }); inp.oninput = () => { yesB.disabled = inp.value.trim().toLowerCase() !== word; };
+      inp.onkeydown = e => { if (e.key === 'Enter' && !yesB.disabled){ e.preventDefault(); yesB.click(); } }; }
+    const done = v => { $('askYes').onclick = $('askNo').onclick = d.oncancel = inp.oninput = inp.onkeydown = null; d.close(); res(v); };
     $('askYes').onclick = () => done(true); $('askNo').onclick = () => done(false); d.oncancel = e => { e.preventDefault(); done(false); };
-    d.showModal();
+    d.showModal(); if (word) inp.focus();
   });
 }
 
