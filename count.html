@@ -80,7 +80,7 @@ input[type=text]:focus{outline:none;background:#fff}
 .counter .num b{display:block;font-size:clamp(3rem,7vh,4.6rem);font-variant-numeric:tabular-nums}
 .counter .num span{font-size:.85rem;color:var(--muted);letter-spacing:.1em}
 .counter .btn{width:46px;padding:0;font-size:1.3rem}
-.lbl{display:block;font-size:1.05rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;margin:.6rem 0 .3rem}
+.lbl{display:block;font-size:1.3rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;margin:.6rem 0 .3rem}
 .lbl:first-child{margin-top:0}
 .inline{display:flex;gap:.45rem;align-items:center}
 .inline input{flex:1;min-width:0}
@@ -98,11 +98,11 @@ input[type=text]:focus{outline:none;background:#fff}
 /* tableau toujours visible, il prend la place qui reste */
 .table{flex:1;min-height:9rem;display:flex;flex-direction:column;padding:0}
 .table .head{display:flex;justify-content:space-between;align-items:center;gap:.5rem;padding:.45rem .6rem;border-bottom:var(--b) solid var(--ink)}
-.table .head b{text-transform:uppercase;letter-spacing:.06em;font-size:1.1rem}
+.table .head b{text-transform:uppercase;letter-spacing:.06em;font-size:1.3rem}
 .table .scroll{flex:1;overflow:auto}
 table{width:100%;border-collapse:collapse;font-size:1.02rem}
 th,td{padding:.32rem .55rem;border-bottom:1px solid rgba(26,26,26,.25);text-align:left;vertical-align:top}
-th{position:sticky;top:0;background:var(--paper);border-bottom:2px solid var(--ink);font-size:.85rem;text-transform:uppercase;letter-spacing:.05em}
+th{position:sticky;top:0;background:var(--paper);border-bottom:2px solid var(--ink);font-size:1.12rem;text-transform:uppercase;letter-spacing:.05em}
 td.n,th.n{text-align:right;font-variant-numeric:tabular-nums;width:4.5rem;border-left:1px solid rgba(26,26,26,.25)}
 tr.row{cursor:pointer}
 tr.row:hover td{background:var(--bg)}
@@ -132,7 +132,7 @@ input[type=checkbox]:active,input[type=radio]:active{transform:translate(var(--b
 .check{display:flex;align-items:center;gap:.6rem;margin:.5rem 0;min-height:34px}
 dialog.pix{border:5px solid var(--ink);background:var(--paper);color:var(--ink);padding:1rem 1.2rem;width:min(30rem,94vw);max-height:94vh;overflow:auto;box-shadow:8px 8px 0 var(--ink)}
 dialog.pix::backdrop{background:rgba(26,26,26,.45)}
-dialog.pix h2{margin:0 0 .6rem;font-size:1.3rem;text-transform:uppercase;letter-spacing:.06em}
+dialog.pix h2{margin:0 0 .6rem;font-size:1.55rem;text-transform:uppercase;letter-spacing:.06em}
 dialog.pix .lbl{margin-top:.9rem}
 dialog.pix .lbl span{font-weight:400;color:var(--muted);text-transform:none;letter-spacing:0;margin-left:.4rem}
 dialog.pix .row{display:flex;justify-content:flex-end;margin-top:1rem;padding:0 var(--b) var(--b) 0}
@@ -147,7 +147,7 @@ dialog.pix .row{display:flex;justify-content:flex-end;margin-top:1rem;padding:0 
 .menu button{display:block;width:100%;text-align:left;border:0;background:none;padding:.5rem .8rem;min-height:42px}
 .menu button:hover:not([disabled]),.menu button:focus-visible{background:var(--bg);outline:none}
 .menu button[disabled]{opacity:.4;cursor:default}
-.menu .mhead{padding:.5rem .8rem .15rem;font-size:.9rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);border-top:2px dashed var(--ink)}
+.menu .mhead{padding:.55rem .8rem .2rem;font-size:1.3rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--ink);border-top:2px dashed var(--ink)}
 .menu .mhead:first-child{border-top:0}
 .chip.plus button{padding:.15rem .6rem;font-weight:700}
 .toast{position:fixed;left:50%;bottom:1rem;transform:translateX(-50%);background:var(--ink);color:var(--paper);padding:.5rem 1rem;z-index:40;display:none;max-width:90vw;box-shadow:var(--b) var(--b) 0 var(--muted)}
@@ -263,7 +263,7 @@ dialog.pix .row{display:flex;justify-content:flex-end;margin-top:1rem;padding:0 
 (() => {
 'use strict';
 const $ = id => document.getElementById(id);
-const VERSION = 'v5 · 04/11';
+const VERSION = 'v6 · 04/11';
 const SAVE_FILE = 'petri-comptage.json';
 const IMG_RE = /\.(jpe?g|png|webp|gif|bmp|avif)$/i;
 const canWriteFolder = typeof window.showDirectoryPicker === 'function'; // Chrome, Edge : lecture et écriture dans le dossier
