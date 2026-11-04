@@ -1,8 +1,8 @@
 {
   "name": "Petri·Capture",
   "short_name": "Petri",
-  "description": "Photographier les boîtes de Petri sans toucher l'écran.",
-  "lang": "fr",
+  "description": "Photograph Petri dishes without touching the screen.",
+  "lang": "en",
   "start_url": "./",
   "scope": "./",
   "display": "fullscreen",

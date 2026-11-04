@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="fr">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Capture des boîtes de Petri</title>
+<title>Petri dish capture</title>
 <link rel="manifest" href="manifest.webmanifest">
 <meta name="theme-color" content="#EFE6D2">
 <link rel="icon" type="image/png" href="icons/icon-192.png">
@@ -277,7 +277,7 @@ body.manual .meters,body.manual .btn.lens{display:none}
 <aside class="side">
   <div class="brand"><div class="title"><h1>Petri·Capture</h1><span class="ver" id="ver"></span></div>
     <button class="flag reload" id="btnReload" type="button" data-i18n-aria="reload"></button>
-    <button class="flag" id="btnLang" type="button"></button></div>
+</div>
   <nav class="nav">
     <button class="btn" id="btnCalib" type="button" data-i18n="calibrate"></button>
     <button class="btn" id="btnPhotos" type="button"><span data-i18n="photos"></span> <span class="count" id="countBadge">0</span></button>
@@ -457,13 +457,13 @@ body.manual .meters,body.manual .btn.lens{display:none}
 
 <div class="toast" id="toast" role="status"></div>
 
-<script src="mascot.js?v37"></script> <!-- ?vNN : à changer avec APP_VERSION, pour contourner le cache de GitHub Pages -->
-<script src="demo.js?v37"></script>
+<script src="mascot.js?v38"></script> <!-- ?vNN : à changer avec APP_VERSION, pour contourner le cache de GitHub Pages -->
+<script src="demo.js?v38"></script>
 <script>
 (() => {
 'use strict';
 const $ = id => document.getElementById(id);
-const APP_VERSION = 'v37 · 04/11'; // à incrémenter à chaque publication
+const APP_VERSION = 'v38 · 05/11'; // à incrémenter à chaque publication
 $('ver').textContent = APP_VERSION;
 
 /* ---------- Mascotte (dessin et animation dans mascot.js) ---------- */
@@ -507,7 +507,7 @@ const I18N = {
     startTitle:'Snap Petri dishes hands-free', startIntro:'Mount the device, back camera facing the base.',
     step1:'Keep the base empty: the app finds the markers and places the circles.', step2:'Check the circles, then save.',
     step3:'Place each dish: the photo is taken automatically.', start:'Start camera', demo:'Try without a camera', demoHint:'Demo: click the image to place or remove a dish.', rotate:'Turn the device to landscape.',
-    langSwitch:'Passer en français', reload:'Reload to get the latest version',
+    reload:'Reload to get the latest version',
     waiting:'Waiting', ready:'Ready', placeLid:'Place a dish and its lid.', place:'Place an open dish.',
     detected:'Dish detected', newDish:'New dish', holdStill:'Hold still.', retrying:'Trying again',
     focusing:'Focusing…', shooting:'Shooting…', saving:'Saving…', saved:'Photo saved',
@@ -550,89 +550,10 @@ const I18N = {
     del: p => 'Delete ' + p.n + '?', delAria: p => 'Delete ' + p.n,
     clearConfirm: p => 'Delete ' + plural(p.n, 'exported photo', 'exported photos') + ' from the app?', dec:'.'
   },
-  fr: {
-    calibrate:'Calibrer', photos:'Photos', settings:'Réglages', fullscreen:'Plein écran', lens:'Objectif',
-    dish:'Boîte', lid:'Couvercle', motion:'Mouvement', sharpness:'Netteté', cancel:'Annuler', confirm:'Confirmer',
-    savedPhotos:'Photos enregistrées', close:'Fermer', share:'Enregistrer dans la galerie', zip:'Télécharger en .zip', zipBusy:'Préparation…',
-    clearExported:'Supprimer les photos exportées', exportNote:"Les photos restent dans l'app tant que vous ne les supprimez pas.",
-    grpDetect:'Détection', sSens:'Seuil de différence', sSensHelp:"Plus bas, l'app réagit à de plus petits changements par rapport au socle vide.",
-    sPresence:'Surface occupée pour détecter', sPresenceHelp:'Part du cercle Boîte qui doit changer. Regardez la mesure Boîte avec une boîte posée.',
-    sStable:'Attente après détection', sMotion:'Tolérance au mouvement', sMotionHelp:"Plus haut, l'app accepte plus de mouvement (vibrations, main proche). Comparez avec la mesure Mouvement.",
-    sFocus:'Durée de mise au point', sFocusHelp:"L'app garde l'image la plus nette sur cette durée.",
-    grpChecks:'Contrôles', cLid:'Socle du couvercle : inclure son cercle dans la photo', cSharp:'Refuser les images floues',
-    cLock:'Verrouiller la mise au point après la première photo (plus rapide)', cMeters:'Afficher les mesures', cSound:'Sons',
-    tOk:'Tester le son de réussite', tErr:"Tester le son d'erreur", grpCamera:'Caméra', btnRef:'Reprendre le fond vide', btnReset:'Rétablir les réglages par défaut', resetQ:'Rétablir les réglages de détection par défaut ? La calibration, la caméra, la langue et l\'e-mail sont conservés.',
-    grpCalib:'Calibration', selCalib:'Mode de calibration', optAruco:'Automatique : marqueurs ArUco', optManual:'Manuel : cercles à placer',
-    selCalibHelp:'Utilisé par « Calibrer » et au démarrage. En automatique, le mode manuel reste proposé si les marqueurs ne sont pas trouvés.',
-    calibNow:'Calibrer maintenant', testSheet:'Feuille de test (PDF)', testSheetHelp:'À imprimer à 100 % pour vérifier la détection des marqueurs sans le vrai socle.',
-    startTitle:"Photographiez les boîtes sans toucher l'écran", startIntro:"Fixez l'appareil, caméra arrière vers le socle.",
-    step1:"Laissez le socle vide : l'app repère les marqueurs et place les cercles.", step2:'Vérifiez les cercles, puis enregistrez.',
-    step3:'Posez chaque boîte : la photo part toute seule.', start:'Démarrer la caméra', demo:'Essayer sans caméra', demoHint:"Démo : cliquez sur l'image pour poser ou retirer une boîte.", rotate:"Tournez l'appareil en paysage.",
-    langSwitch:'Switch to English', reload:'Recharger pour avoir la dernière version',
-    waiting:'En attente', ready:'Prêt', placeLid:'Posez une boîte et son couvercle.', place:'Posez une boîte ouverte.',
-    detected:'Boîte détectée', newDish:'Nouvelle boîte', holdStill:'Ne bougez plus.', retrying:'Nouvel essai',
-    focusing:'Mise au point…', shooting:'Prise de vue…', saving:'Enregistrement…', saved:'Photo enregistrée',
-    savedSmall: p => plural(p.n, 'photo', 'photos') + '. Retirez la boîte.',
-    failMoved:'Ça a bougé', failMovedD:'La boîte ou une main a bougé.', failLid:'Couvercle absent', failLidD:'Posez le couvercle dans son cercle.',
-    failBlur:'Image floue', failBlurD: p => 'Netteté ' + p.v + ", d'habitude " + p.m + '.',
-    failSave:"Échec de l'enregistrement", failQuota:'Mémoire pleine : exportez, puis supprimez des photos.', failErr: p => 'Erreur : ' + p.e + '.',
-    retryAuto:'Nouvel essai…', removeToRetry:'Retirez la boîte pour réessayer.', photoNow:'Photo maintenant',
-    bgMeasure:'Mesure du fond vide…', keepEmpty:'Laissez le socle vide.', shapeChanged:"L'image a changé de forme.",
-    findMarkers:'Recherche des marqueurs…', noDetector:'Marqueurs indisponibles', noDetectorD:"Le détecteur n'a pas chargé (hors connexion ?).",
-    retry:'Réessayer', manualBtn:'Calibrer à la main', saveBtn:'Enregistrer', calibFail:'Calibration impossible',
-    calibFound:'Calibration trouvée', checkCircles:'Vérifiez les cercles.', placeCircles:'Placez les cercles',
-    baseDish:'Socle boîte', baseLid:'Socle couvercle', dirs:['N', 'E', 'S', 'O'],
-    errMissing: p => p.base + ' : manque ' + p.list + '.', errAligned: p => p.base + ' : marqueurs alignés.',
-    errMirror: p => p.base + ' : marqueurs inversés ?', errSize: p => p.base + ' : taille aberrante.',
-    errRatio:'Socles de tailles incohérentes : vérifiez les ID.', need3:'Il faut au moins 3 marqueurs au total, sur l\'un ou l\'autre socle.', noMarkers:'Aucun marqueur trouvé. Laissez le socle vide et bien éclairé.',
-    partial: p => p.base + ' : ' + p.n + '/4 marqueurs.',
-    calibSaved:'Calibration enregistrée.', refocus:'Floue : nouvelle mise au point.', lockFail:'Verrouillage raté, autofocus conservé.',
-    lockOk:'Mise au point verrouillée.', bgUpdated:'Fond vide mis à jour.', bgAuto:'Fond vide repris automatiquement.', socleMoved:'Socle déplacé : cercles recalés.', lensT: p => 'Objectif : ' + p.l, needCalib:' Calibration nécessaire.',
-    shared: p => plural(p.n, 'photo envoyée', 'photos envoyées') + '.', shareFail: p => 'Partage impossible : ' + p.e,
-    shareNA:"Le partage vers la galerie n'est pas disponible ici. Utilisez le .zip.", zipNA:"Le module .zip n'a pas chargé (connexion ?).",
-    zipReady: p => 'Archive prête : ' + p.f, exportFail: p => 'Export impossible : ' + p.e, noFullscreen:"Plein écran indisponible sur cet appareil.",
-    errNoApi:"Ce navigateur n'accède pas à la caméra. Ouvrez la page en HTTPS dans Safari ou Chrome.",
-    errDenied:"Accès à la caméra refusé. Autorisez-le dans les réglages du navigateur, et ouvrez la page directement dans Safari ou Chrome.",
-    resLabel:'Résolution', resMax: p => 'Maximum' + (p.w ? ' (' + p.w + ' × ' + p.h + ')' : ''), resHelp:"Maximum donne les photos les plus nettes. Baissez-la si l'app rame.",
-    grpExport:'Envoi par e-mail', emailLabel:'Adresse du destinataire', emailHelp:'Utilisée par « Envoyer par e-mail » dans Photos. Enregistrée seulement sur cet appareil.',
-    sGap:'Nouvelle session après', sGapHelp:'Les photos prises à moins de cet écart font partie de la même session.',
-    mailBtn:'Envoyer par e-mail', mailTitle:'Envoyer par e-mail', mailPrepare:'Préparer', mailCopy:"Copier l'adresse", mailNone:'Aucune photo à envoyer.',
-    mailSession: p => 'Dernière session : ' + plural(p.n, 'photo', 'photos') + ' (' + p.from + ' – ' + p.to + ')', mailAll: p => 'Toutes les photos (' + p.n + ')',
-    mailBadAddr:'Saisissez une adresse e-mail valide.', mailBusy:'Préparation…',
-    mailInfo: p => plural(p.n, 'photo', 'photos') + ', ' + p.mb + ' Mo' + (p.parts > 1 ? ', en ' + p.parts + ' parties.' : '.'),
-    mailHowShare: p => 'Appuyez sur chaque partie et choisissez votre messagerie (Outlook, Gmail, Mail…). L\'adresse ' + p.to + ' est copiée : dans le champ « À », appui long puis Coller.',
-    mailHowDownload: p => "Cet appareil ne sait pas joindre de fichier directement : les .zip sont téléchargés et un e-mail à " + p.to + " s'ouvre. Joignez-les à la main.",
-    mailPart: p => 'Envoyer la partie ' + p.i + '/' + p.n + ' (' + p.mb + ' Mo)', mailPartOne: p => 'Envoyer (' + p.mb + ' Mo)',
-    mailSubject: p => 'Petri·Capture – ' + p.date + (p.parts > 1 ? ' (' + p.i + '/' + p.parts + ')' : ''),
-    mailBody: p => plural(p.n, 'photo', 'photos') + ' de Petri·Capture.', mailCopied:'Adresse copiée.', qualLabel:"Qualité des images", qualFull:'Pleine résolution (telle que prise)', qualMedium:'Moyenne (2000 px) – recommandée', qualLight:'Légère (1200 px, la plus petite)', zipRefused:"Cet appareil refuse les .zip : appuyez à nouveau pour envoyer les photos directement.", galleryHow:'10 photos au plus par partage : appuyez sur chaque partie et choisissez où enregistrer.', mailShareFail: p => 'Partage impossible : ' + p.e,
-    errNoCam:'Aucune caméra trouvée.', errBusy:'Une autre app utilise la caméra. Fermez-la puis réessayez.',
-    errStart: p => 'Impossible de démarrer la caméra (' + p.e + ').', camN: p => 'Caméra ' + p.n, camInfo: p => 'Image : ' + p.w + ' × ' + p.h + ' px',
-    emptyGrid:"Aucune photo pour l'instant. Posez une boîte sur le socle pour commencer.", exported:'exportée',
-    del: p => 'Supprimer ' + p.n + ' ?', delAria: p => 'Supprimer ' + p.n,
-    clearConfirm: p => 'Supprimer ' + plural(p.n, 'photo exportée', 'photos exportées') + " de l'app ?", dec:','
-  }
 };
-let lang = I18N[settings.lang] ? settings.lang : 'en';
+const lang = 'en'; // l'app est en anglais uniquement
 function t(k, p){ const v = I18N[lang][k] !== undefined ? I18N[lang][k] : I18N.en[k]; return typeof v === 'function' ? v(p || {}) : v; }
 const T = (k, p) => () => t(k, p); // texte traduit au moment de l'affichage (suit les changements de langue)
-// drapeaux en pixel art (16 × 10)
-function flagSvg(code){
-  const px = [];
-  for (let y = 0; y < 10; y++) for (let x = 0; x < 16; x++){
-    let c;
-    if (code === 'fr') c = x < 5 ? '#1F3A93' : x < 11 ? '#FFFFFF' : '#D2452F';
-    else {
-      const dx = x - 7.5, dy = y - 4.5, d1 = Math.abs(dy - dx*10/16), d2 = Math.abs(dy + dx*10/16);
-      c = '#1F3A93';
-      if (d1 < 1.2 || d2 < 1.2) c = '#FFFFFF';
-      if (d1 < .5 || d2 < .5) c = '#D2452F';
-      if (Math.abs(dx) < 2 || Math.abs(dy) < 2) c = '#FFFFFF';
-      if (Math.abs(dx) < 1 || Math.abs(dy) < 1) c = '#D2452F';
-    }
-    px.push('<rect x="' + x + '" y="' + y + '" width="1" height="1" fill="' + c + '"/>');
-  }
-  return '<svg viewBox="0 0 16 10" aria-hidden="true">' + px.join('') + '</svg>';
-}
 
 /* ---------- État ---------- */
 let stream = null, track = null, W = 0, H = 0;
@@ -688,7 +609,7 @@ async function tx(modeRW, fn){
     const t = d.transaction('photos', modeRW), s = t.objectStore('photos');
     const out = fn(s);
     t.oncomplete = () => res(out && out.result !== undefined ? out.result : out);
-    t.onerror = () => rej(t.error); t.onabort = () => rej(t.error || new Error('abandon'));
+    t.onerror = () => rej(t.error); t.onabort = () => rej(t.error || new Error('aborted'));
   });
 }
 const photoPut = rec => tx('readwrite', s => s.put(rec));
@@ -1621,8 +1542,8 @@ async function save(){
   state = 'saving';
   setStatus('busy', T('saving'), '', []);
   try{
-    if (bestCv.width < 10) throw new Error('image vide');
-    const blob = await new Promise((res, rej) => bestCv.toBlob(b => b ? res(b) : rej(new Error('encodage impossible')), 'image/jpeg', .93));
+    if (bestCv.width < 10) throw new Error('empty image');
+    const blob = await new Promise((res, rej) => bestCv.toBlob(b => b ? res(b) : rej(new Error('encoding failed')), 'image/jpeg', .93));
     const dt = new Date(), id = Date.now();
     let name = dt.getFullYear() + '-' + pad(dt.getMonth()+1) + '-' + pad(dt.getDate()) + '_' + pad(dt.getHours()) + 'h' + pad(dt.getMinutes()) + 'm' + pad(dt.getSeconds()) + 's.jpg';
     const all = await photoAll();
@@ -1761,7 +1682,7 @@ async function reencode(r, level){
   const k = Math.min(1, px / Math.max(bmp.width, bmp.height)), c = document.createElement('canvas');
   c.width = Math.round(bmp.width*k); c.height = Math.round(bmp.height*k);
   c.getContext('2d').drawImage(bmp, 0, 0, c.width, c.height); if (bmp.close) bmp.close();
-  const blob = await new Promise((res, rej) => c.toBlob(b => b ? res(b) : rej(new Error('encodage impossible')), 'image/jpeg', q));
+  const blob = await new Promise((res, rej) => c.toBlob(b => b ? res(b) : rej(new Error('encoding failed')), 'image/jpeg', q));
   return Object.assign({}, r, { blob });
 }
 $('mailPrepare').addEventListener('click', async () => {
@@ -1975,8 +1896,6 @@ function applyLang(){
   document.documentElement.lang = lang;
   document.querySelectorAll('[data-i18n]').forEach(e => { e.textContent = t(e.dataset.i18n); });
   document.querySelectorAll('[data-i18n-aria]').forEach(e => e.setAttribute('aria-label', t(e.dataset.i18nAria)));
-  const other = lang === 'en' ? 'fr' : 'en', b = $('btnLang');
-  b.innerHTML = flagSvg(lang); b.setAttribute('aria-label', t('langSwitch')); b.title = t('langSwitch');
   $('btnReload').title = t('reload');
   rangeLabels.forEach(f => f());
   if (lastStatus) setStatus(...lastStatus); else setStatus('idle', T('waiting'), '');
@@ -1999,7 +1918,6 @@ $('btnReload').addEventListener('click', async () => {
   }catch(e){}
   location.reload();
 });
-$('btnLang').addEventListener('click', () => { lang = lang === 'en' ? 'fr' : 'en'; settings.lang = lang; store.set('petri.settings', settings); applyLang(); });
 applyLang();
 refreshCount();
 // installation comme application (Chrome : « Installer l'application ») et fonctionnement hors connexion

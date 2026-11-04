@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="fr">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Comptage des boîtes de Petri</title>
+<title>Petri dish counting</title>
 <meta name="theme-color" content="#EFE6D2">
 <link rel="icon" type="image/png" href="icons/icon-192.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -53,7 +53,9 @@ input[type=text]:focus{outline:none;background:#fff}
 .brand{display:flex;flex-direction:column;margin-right:auto;white-space:nowrap}
 .brand h1{font-size:1.2rem;margin:0;letter-spacing:.08em;text-transform:uppercase}
 .ver{font-size:.75rem;color:var(--muted)}
-.folder{font-size:.9rem;color:var(--muted);max-width:22rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:inline-flex;align-items:center;gap:.4rem}
+.folder{font-size:.9rem;color:var(--muted);max-width:22rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:inline-flex;align-items:center;gap:.4rem;
+  border:0;background:none;padding:.2rem .3rem;cursor:pointer}
+.folder:hover span{text-decoration:underline}
 .folder svg{width:26px;height:22px;flex:none;shape-rendering:crispEdges}
 .folder span{overflow:hidden;text-overflow:ellipsis}
 /* aperçu toujours en 16:9 (format des photos de Petri-capture), le plus grand possible dans la place disponible */
@@ -154,6 +156,7 @@ dialog.pix .row{display:flex;justify-content:flex-end;margin-top:1rem;padding:0 
 .menu button[disabled]{opacity:.4;cursor:default}
 .menu .mhead{padding:.55rem .8rem .2rem;font-size:1.3rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--ink);border-top:2px dashed var(--ink)}
 .menu .mhead:first-child{border-top:0}
+.chips.scope{margin-top:.5rem;margin-bottom:0}
 .chip.plus button{padding:.15rem .6rem;font-weight:700}
 .toast{position:fixed;left:50%;bottom:1rem;transform:translateX(-50%);background:var(--ink);color:var(--paper);padding:.5rem 1rem;z-index:40;display:none;max-width:90vw;box-shadow:var(--b) var(--b) 0 var(--muted)}
 .toast.show{display:block}
@@ -165,7 +168,7 @@ dialog.pix .row{display:flex;justify-content:flex-end;margin-top:1rem;padding:0 
 <div class="main">
   <div class="top">
     <div class="brand"><h1>Petri·Count</h1><span class="ver" id="ver"></span></div>
-    <span class="folder" id="folderName"></span>
+    <button class="folder" id="folderName" type="button" hidden></button>
     <button class="btn" id="btnFolder" type="button" data-i18n="chooseFolder"></button>
     <div class="menuwrap">
       <button class="btn" id="btnCsv" type="button" data-i18n="exportBtn" aria-haspopup="menu" aria-expanded="false" disabled></button>
@@ -179,7 +182,6 @@ dialog.pix .row{display:flex;justify-content:flex-end;margin-top:1rem;padding:0 
       </div>
     </div>
     <button class="btn" id="btnSettings" type="button" data-i18n="settings"></button>
-    <button class="flag" id="btnLang" type="button"></button>
   </div>
   <div class="stage"><div class="frame">
     <div class="screen" id="screen">
@@ -215,8 +217,8 @@ dialog.pix .row{display:flex;justify-content:flex-end;margin-top:1rem;padding:0 
   </div>
   <div class="card">
     <label class="lbl" for="inPrefix" data-i18n="prefix"></label>
-    <div class="inline"><input type="text" id="inPrefix" autocomplete="off" data-i18n-ph="prefixPh">
-      <button class="btn small" id="btnPrefixAll" type="button" data-i18n="applyAll"></button></div>
+    <input type="text" id="inPrefix" autocomplete="off" data-i18n-ph="prefixPh">
+    <div class="chips scope" id="prefixScope"></div>
     <span class="lbl" data-i18n="group"></span>
     <div class="chips" id="chips"></div>
     <div class="inline" id="groupAdd" hidden><input type="text" id="inGroup" autocomplete="off" data-i18n-ph="groupPh">
@@ -280,7 +282,7 @@ dialog.pix .row{display:flex;justify-content:flex-end;margin-top:1rem;padding:0 
 (() => {
 'use strict';
 const $ = id => document.getElementById(id);
-const VERSION = 'v11 · 05/11';
+const VERSION = 'v13 · 05/11';
 const SAVE_FILE = 'petri-comptage.json';
 const IMG_RE = /\.(jpe?g|png|webp|gif|bmp|avif)$/i;
 const canWriteFolder = typeof window.showDirectoryPicker === 'function'; // Chrome, Edge : lecture et écriture dans le dossier
@@ -291,42 +293,19 @@ const store = {
 
 /* ---------- Langues ---------- */
 const I18N = {
-  fr: {
-    chooseFolder:'Choisir le dossier des photos', exportCsv:'Exporter (.csv)', prev:'Précédente', next:'Suivante', fit:'Ajuster',
-    emptyIntro:"Choisissez le dossier qui contient les photos des boîtes. Les comptes sont enregistrés à chaque changement d'image.",
-    reopen: p => 'Rouvrir « ' + p.n + ' »',
-    noWrite:"Ce navigateur ne peut pas écrire dans le dossier : la sauvegarde reste dans le navigateur. Pour l'avoir dans le dossier, utilisez Chrome ou Edge.",
-    hint:'Clic gauche : ajouter ou retirer une colonie · molette : zoom · clic droit maintenu : déplacer · ← → : image',
-    undo:'Annuler', redo:'Rétablir', prefix:'Préfixe de la manip', prefixPh:'ex. : 2026-11-04_E.coli', applyAll:'Partout',
-    group:'Groupe', groupPh:'Nouveau groupe…', add:'Ajouter', name:'Nom', namePh:'ex. : 10-3', results:'Résultats', colName:'Nom',
-    noImages:"Aucune image trouvée dans ce dossier.", savedFolder:'Enregistré dans le dossier', savedLocal:'Enregistré dans le navigateur',
-    saveErr:"Échec de l'enregistrement", csvDone: p => 'Tableau enregistré : ' + p.f, applied:'Préfixe appliqué à toutes les images comptées.',
-    loaded: p => p.n + ' images, sauvegarde reprise.', found: p => p.n + ' images trouvées.', langSwitch:'Switch to English', permDenied:"Accès au dossier refusé.",
-    csvHere:'Dans le dossier des images', csvElse:'Choisir un autre emplacement…', settings:'Réglages', close:'Fermer',
-    exportBtn:'Exporter', mCsv:'Tableau (.csv)', mPdf:'Rapport (.pdf)', newGroup:'Nouveau groupe',
-    expName:"Nom de l'expérience", expDesc:'Courte description', required:'obligatoire', optional:'facultatif', cancel:'Annuler', create:'Créer le rapport',
-    pdfEnglish:'Le rapport est rédigé en anglais, pour pouvoir être transmis tel quel.',
-    folderData:'Comptes de ce dossier', wipe:'Effacer tous les comptes de ce dossier',
-    wipeTitle:'Tout effacer ?', wipeText: p => 'Les comptes, les noms et les groupes du dossier « ' + p.f + ' » seront supprimés (fichier ' + p.s + ' et copie du navigateur). Cette action est définitive : ils ne pourront pas être récupérés. Les photos ne sont pas touchées.',
-    typeWord: p => 'Tapez « ' + p.w + ' » pour confirmer',
-    wipeYes:'Effacer', wiped:'Comptes effacés.', noFolder:"Choisissez d'abord un dossier.",
-    restoreTitle:'Copie trouvée dans le navigateur', restoreText: p => 'Le dossier ne contient pas de sauvegarde (' + p.s + '), mais le navigateur en a gardé une copie (' + p.n + ' image(s) comptée(s)). La reprendre ?',
-    restoreYes:'Reprendre la copie', restoreNo:'Repartir de zéro',
-    pdfBusy: p => 'Création du rapport… ' + p.i + ' / ' + p.n, pdfDone: p => 'Rapport enregistré : ' + p.f, pdfNoLib:"Le module PDF n'a pas pu se charger (connexion ?).",
-    markSize:'Taille des repères', markColor:'Couleur des repères', markNum:'Numéroter les repères', keepZoom:"Garder le zoom en changeant d'image",
-    nameSep:'Séparateur du nom final', csvSep:'Séparateur du fichier CSV', space:'espace', csvSemi:'; (Excel en français)', csvComma:', (Excel en anglais)'
-  },
   en: {
-    chooseFolder:'Choose the photo folder', exportCsv:'Export (.csv)', prev:'Previous', next:'Next', fit:'Fit',
+    chooseFolder:'Choose the photo folder', folderTip:'Open the folder picker in this folder', exportCsv:'Export (.csv)', prev:'Previous', next:'Next', fit:'Fit',
     emptyIntro:'Choose the folder that holds the dish photos. Counts are saved every time you change image.',
     reopen: p => 'Reopen “' + p.n + '”',
     noWrite:'This browser cannot write into the folder: the save stays in the browser. Use Chrome or Edge to keep it in the folder.',
     hint:'Left click: add or remove a colony · wheel: zoom · hold right click: move · ← →: image',
-    undo:'Undo', redo:'Redo', prefix:'Experiment prefix', prefixPh:'e.g. 2026-11-04_E.coli', applyAll:'All',
+    undo:'Undo', redo:'Redo', prefix:'Experiment prefix', prefixPh:'e.g. 2026-11-04_E.coli', scopeOne:'Only this one', scopeAll:'All images',
+    prefixAllQ: p => p.v ? 'Apply the prefix “' + p.v + '” to all images?' : 'Remove the prefix from all images?',
+    prefixAllD: p => p.n + ' image(s) already opened will get this prefix. The ↶ ↷ arrows on this image can undo it.', apply:'Apply',
     group:'Group', groupPh:'New group…', add:'Add', name:'Name', namePh:'e.g. 10-3', results:'Results', colName:'Name',
     noImages:'No images found in this folder.', savedFolder:'Saved in the folder', savedLocal:'Saved in the browser',
-    saveErr:'Save failed', csvDone: p => 'Table saved: ' + p.f, applied:'Prefix applied to every counted image.',
-    loaded: p => p.n + ' images, save restored.', found: p => p.n + ' images found.', langSwitch:'Passer en français', permDenied:'Folder access denied.',
+    saveErr:'Save failed', csvDone: p => 'Table saved: ' + p.f,
+    loaded: p => p.n + ' images, save restored.', found: p => p.n + ' images found.', permDenied:'Folder access denied.',
     csvHere:'In the image folder', csvElse:'Choose another location…', settings:'Settings', close:'Close',
     exportBtn:'Export', mCsv:'Table (.csv)', mPdf:'Report (.pdf)', newGroup:'New group',
     expName:'Experiment name', expDesc:'Short description', required:'required', optional:'optional', cancel:'Cancel', create:'Create report',
@@ -342,41 +321,17 @@ const I18N = {
     nameSep:'Final name separator', csvSep:'CSV separator', space:'space', csvSemi:'; (Excel in French)', csvComma:', (Excel in English)'
   }
 };
-const appSettings = store.get('petri.settings', {});
-let lang = I18N[appSettings.lang] ? appSettings.lang : (navigator.language || '').startsWith('fr') ? 'fr' : 'en';
+const lang = 'en'; // le site est en anglais uniquement
 const t = (k, p) => { const v = I18N[lang][k] !== undefined ? I18N[lang][k] : I18N.en[k]; return typeof v === 'function' ? v(p || {}) : v; };
-function flagSvg(code){ // drapeaux en pixel art, comme dans l'app de capture
-  const px = [];
-  for (let y = 0; y < 10; y++) for (let x = 0; x < 16; x++){
-    let c;
-    if (code === 'fr') c = x < 5 ? '#1F3A93' : x < 11 ? '#FFFFFF' : '#D2452F';
-    else {
-      const dx = x - 7.5, dy = y - 4.5, d1 = Math.abs(dy - dx*10/16), d2 = Math.abs(dy + dx*10/16);
-      c = '#1F3A93';
-      if (d1 < 1.2 || d2 < 1.2) c = '#FFFFFF';
-      if (d1 < .5 || d2 < .5) c = '#D2452F';
-      if (Math.abs(dx) < 2 || Math.abs(dy) < 2) c = '#FFFFFF';
-      if (Math.abs(dx) < 1 || Math.abs(dy) < 1) c = '#D2452F';
-    }
-    px.push('<rect x="' + x + '" y="' + y + '" width="1" height="1" fill="' + c + '"/>');
-  }
-  return '<svg viewBox="0 0 16 10" aria-hidden="true">' + px.join('') + '</svg>';
-}
 function applyLang(){
   document.documentElement.lang = lang;
   document.querySelectorAll('[data-i18n]').forEach(e => { e.textContent = t(e.dataset.i18n); });
   document.querySelectorAll('[data-i18n-aria]').forEach(e => { e.setAttribute('aria-label', t(e.dataset.i18nAria)); e.title = t(e.dataset.i18nAria); });
   document.querySelectorAll('[data-i18n-ph]').forEach(e => { e.placeholder = t(e.dataset.i18nPh); });
-  $('btnLang').innerHTML = flagSvg(lang); $('btnLang').title = t('langSwitch'); $('btnLang').setAttribute('aria-label', t('langSwitch'));
   $('browserNote').textContent = canWriteFolder ? '' : t('noWrite');
   updateReopen(); renderSaved(); renderTable();
   if ($('setDlg').open) buildSettings();
 }
-$('btnLang').addEventListener('click', () => {
-  lang = lang === 'fr' ? 'en' : 'fr';
-  const s = store.get('petri.settings', {}); s.lang = lang; store.set('petri.settings', s); // même choix que l'app de capture
-  applyLang();
-});
 $('ver').textContent = VERSION;
 
 /* ---------- Réglages (gardés dans le navigateur) ---------- */
@@ -459,11 +414,15 @@ function finalName(r){ return r ? [r.prefix, r.group, r.name].map(s => (s || '')
 /* ---------- Dossier ---------- */
 async function chooseFolder(){
   if (canWriteFolder){
-    try{ const h = await window.showDirectoryPicker({ id:'petri-count', mode:'readwrite' }); await openDir(h); saveHandle(h); }
+    try{
+      const opts = { id:'petri-count', mode:'readwrite' }; if (dir) opts.startIn = dir; // s'ouvre dans le dossier en cours
+      const h = await window.showDirectoryPicker(opts); await openDir(h); saveHandle(h);
+    }
     catch(e){ if (e && e.name !== 'AbortError') toast(t('permDenied')); }
   } else $('dirInput').click();
 }
 $('btnFolder').addEventListener('click', chooseFolder);
+$('folderName').addEventListener('click', chooseFolder); // une page web ne peut pas ouvrir le Finder/l'Explorateur : on rouvre le sélecteur dans ce dossier
 $('btnFolder2').addEventListener('click', chooseFolder);
 async function openDir(h){
   const list = []; let saved = null;
@@ -477,7 +436,7 @@ async function openDir(h){
 // navigateurs sans accès en écriture : on lit le dossier choisi, la sauvegarde reste dans le navigateur
 $('dirInput').addEventListener('change', async e => {
   const all = [...e.target.files]; if (!all.length) return;
-  const name = (all[0].webkitRelativePath || '').split('/')[0] || 'dossier';
+  const name = (all[0].webkitRelativePath || '').split('/')[0] || 'folder';
   const top = all.filter(f => (f.webkitRelativePath || f.name).split('/').length <= 2); // fichiers du dossier lui-même
   let saved = null; const sf = top.find(f => f.name === SAVE_FILE);
   if (sf){ try{ saved = JSON.parse(await sf.text()); }catch(err){} }
@@ -498,7 +457,7 @@ async function load(name, list, saved){
   data = Object.assign(blank(), saved && saved.images ? saved : local && local.images ? local : {});
   lastPrefix = data.prefix || ''; lastGroup = data.group || '';
   for (const k in hist) delete hist[k];
-  $('folderName').innerHTML = FOLDER_SVG; const fn = document.createElement('span'); fn.textContent = folder; $('folderName').appendChild(fn);
+  $('folderName').hidden = false; $('folderName').title = t('folderTip'); $('folderName').innerHTML = FOLDER_SVG; const fn = document.createElement('span'); fn.textContent = folder; $('folderName').appendChild(fn);
   $('btnCsv').disabled = !files.length;
   if (!files.length){ toast(t('noImages')); showEmpty(true); renderTable(); return; }
   toast(saved || local ? t('loaded', { n:files.length }) : t('found', { n:files.length }));
@@ -633,6 +592,11 @@ function clickAt(cx, cy){
   else apply({ op:'add', i:r.marks.length, m:[x / natW, y / natH] });
 }
 function doOp(a, reverse){
+  if (a.op === 'prefixAll'){
+    for (const k in a.before) if (data.images[k]) data.images[k].prefix = reverse ? a.before[k] : a.value;
+    const r = rec(); if (r){ lastPrefix = r.prefix; $('inPrefix').value = r.prefix; }
+    return;
+  }
   const r = rec(), add = (a.op === 'add') !== !!reverse;
   if (add) r.marks.splice(a.i, 0, a.m); else r.marks.splice(a.i, 1);
 }
@@ -646,11 +610,26 @@ function changed(){ renderAll(); scheduleSave(); }
 /* ---------- Nom de la condition ---------- */
 $('inPrefix').addEventListener('input', e => { const r = rec(); if (!r) return; r.prefix = lastPrefix = e.target.value; changed(); });
 $('inName').addEventListener('input', e => { const r = rec(); if (!r) return; r.name = e.target.value; changed(); });
-$('btnPrefixAll').addEventListener('click', () => {
-  if (idx < 0) return;
-  for (const k in data.images) data.images[k].prefix = lastPrefix;
-  changed(); toast(t('applied'));
-});
+// Portée du préfixe : la case cochée reflète l'état réel. « Toutes les images » est cochée quand toutes les images
+// ouvertes partagent ce préfixe ; taper un autre préfixe ne change que l'image en cours (et les suivantes, nouvelles).
+const allSamePrefix = () => { const recs = Object.values(data.images), r = rec(); return !!r && !!(r.prefix || '').trim() && recs.length > 1 && recs.every(x => (x.prefix || '') === r.prefix); }; // pas coché tant qu'aucun préfixe n'est saisi
+function renderScope(){
+  const box = $('prefixScope'), all = allSamePrefix(); box.innerHTML = '';
+  [['one', t('scopeOne'), !all], ['all', t('scopeAll'), all]].forEach(([k, label, on]) => {
+    const c = document.createElement('span'); c.className = 'chip'; c.setAttribute('aria-pressed', String(on));
+    const b = document.createElement('button'); b.type = 'button'; b.disabled = idx < 0;
+    const tick = document.createElement('span'); tick.className = 'tick'; tick.setAttribute('aria-hidden', 'true'); b.append(tick, document.createTextNode(label));
+    if (k === 'all') b.addEventListener('click', prefixToAll);
+    c.appendChild(b); box.appendChild(c);
+  });
+}
+async function prefixToAll(){
+  const r = rec(); if (!r || allSamePrefix()) return;
+  const v = (r.prefix || '').trim(), n = Object.keys(data.images).length;
+  if (!(await ask(t('prefixAllQ', { v }), t('prefixAllD', { n }), t('apply'), t('cancel')))) return;
+  const before = {}; for (const k in data.images) before[k] = data.images[k].prefix || '';
+  apply({ op:'prefixAll', value:r.prefix || '', before }); // annulable avec ↶ sur cette image
+}
 function addGroup(){
   const v = $('inGroup').value.trim(); if (!v) return;
   if (!data.groups.includes(v)) data.groups.push(v);
@@ -711,7 +690,7 @@ function renderAll(){
   $('btnUndo').disabled = !h.undo.length; $('btnRedo').disabled = !h.redo.length;
   const fn = finalName(r), fe = $('finalName');
   fe.textContent = fn || (idx >= 0 ? stem(curName()) : '–'); fe.classList.toggle('fallback', !fn);
-  renderChips(); renderMarks(); renderTable();
+  renderChips(); renderScope(); renderMarks(); renderTable();
 }
 
 /* ---------- Export ---------- */
