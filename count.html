@@ -53,7 +53,9 @@ input[type=text]:focus{outline:none;background:#fff}
 .brand{display:flex;flex-direction:column;margin-right:auto;white-space:nowrap}
 .brand h1{font-size:1.2rem;margin:0;letter-spacing:.08em;text-transform:uppercase}
 .ver{font-size:.75rem;color:var(--muted)}
-.folder{font-size:.9rem;color:var(--muted);max-width:22rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.folder{font-size:.9rem;color:var(--muted);max-width:22rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:inline-flex;align-items:center;gap:.4rem}
+.folder svg{width:26px;height:22px;flex:none;shape-rendering:crispEdges}
+.folder span{overflow:hidden;text-overflow:ellipsis}
 .frame{position:relative;flex:1;min-height:0;padding:6px;background:var(--ink);box-shadow:8px 8px 0 rgba(26,26,26,.16)}
 .screen{position:absolute;inset:6px;overflow:hidden;background:var(--viewer);cursor:crosshair;touch-action:none;user-select:none}
 .screen.panning{cursor:grabbing}
@@ -272,7 +274,7 @@ dialog.pix .row{display:flex;justify-content:flex-end;margin-top:1rem;padding:0 
 (() => {
 'use strict';
 const $ = id => document.getElementById(id);
-const VERSION = 'v7 · 04/11';
+const VERSION = 'v8 · 04/11';
 const SAVE_FILE = 'petri-comptage.json';
 const IMG_RE = /\.(jpe?g|png|webp|gif|bmp|avif)$/i;
 const canWriteFolder = typeof window.showDirectoryPicker === 'function'; // Chrome, Edge : lecture et écriture dans le dossier
@@ -415,6 +417,13 @@ function ask(title, text, yes, no){
   });
 }
 
+// dossier en pixel art (13 × 11) : contour noir, intérieur jaune comme les repères
+const FOLDER_SVG = (() => {
+  const rows = ['.####........', '#mmmm#.......', '#mmmmm######.', '#############', '#yyyyyyyyyyy#', '#yyyyyyyyyyy#', '#yyyyyyyyyyy#', '#yyyyyyyyyyy#', '#yyyyyyyyyyy#', '#############'];
+  const col = { '#':'#1A1A1A', m:'#D9A93A', y:'#F2C14E' };
+  return '<svg viewBox="0 0 13 10" aria-hidden="true">' + rows.map((r, y) => [...r].map((ch, x) => col[ch] ? '<rect x="' + x + '" y="' + y + '" width="1" height="1" fill="' + col[ch] + '"/>' : '').join('')).join('') + '</svg>';
+})();
+
 let toastT = null;
 function toast(msg){ const e = $('toast'); e.textContent = msg; e.classList.add('show'); clearTimeout(toastT); toastT = setTimeout(() => e.classList.remove('show'), 3200); }
 
@@ -475,7 +484,7 @@ async function load(name, list, saved){
   data = Object.assign(blank(), saved && saved.images ? saved : local && local.images ? local : {});
   lastPrefix = data.prefix || ''; lastGroup = data.group || '';
   for (const k in hist) delete hist[k];
-  $('folderName').textContent = '📁 ' + folder;
+  $('folderName').innerHTML = FOLDER_SVG; const fn = document.createElement('span'); fn.textContent = folder; $('folderName').appendChild(fn);
   $('btnCsv').disabled = !files.length;
   if (!files.length){ toast(t('noImages')); showEmpty(true); renderTable(); return; }
   toast(saved || local ? t('loaded', { n:files.length }) : t('found', { n:files.length }));
