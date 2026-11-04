@@ -38,6 +38,7 @@ button{cursor:pointer}
 .btn:active:not([disabled]){transform:translate(var(--b),var(--b));box-shadow:none}
 .btn.primary{background:var(--ink);color:var(--paper)}
 .btn[disabled]{opacity:.4;cursor:default}
+.btn.danger{color:var(--err);border-color:var(--err);box-shadow:var(--b) var(--b) 0 var(--err)}
 .btn.small{min-height:32px;padding:.1rem .5rem;font-size:.85rem}
 .flag{padding:3px;min-height:0;border:var(--b) solid var(--ink);background:var(--paper);box-shadow:var(--b) var(--b) 0 var(--ink);line-height:0;cursor:pointer}
 .flag:active{transform:translate(var(--b),var(--b));box-shadow:none}
@@ -238,7 +239,15 @@ dialog.pix .row{display:flex;justify-content:flex-end;margin-top:1rem;padding:0 
   <div class="choices" id="sepChoices"></div>
   <span class="lbl" data-i18n="csvSep"></span>
   <div class="choices" id="csvSepChoices"></div>
+  <span class="lbl" data-i18n="folderData"></span>
+  <button class="btn danger" id="btnWipe" type="button" data-i18n="wipe"></button>
   <div class="row"><button class="btn primary" id="setClose" type="button" data-i18n="close"></button></div>
+</dialog>
+
+<dialog class="pix" id="askDlg">
+  <h2 id="askTitle"></h2>
+  <p id="askText"></p>
+  <div class="row" style="gap:.7rem"><button class="btn" id="askNo" type="button"></button><button class="btn primary" id="askYes" type="button"></button></div>
 </dialog>
 
 <dialog class="pix" id="pdfDlg">
@@ -263,7 +272,7 @@ dialog.pix .row{display:flex;justify-content:flex-end;margin-top:1rem;padding:0 
 (() => {
 'use strict';
 const $ = id => document.getElementById(id);
-const VERSION = 'v6 · 04/11';
+const VERSION = 'v7 · 04/11';
 const SAVE_FILE = 'petri-comptage.json';
 const IMG_RE = /\.(jpe?g|png|webp|gif|bmp|avif)$/i;
 const canWriteFolder = typeof window.showDirectoryPicker === 'function'; // Chrome, Edge : lecture et écriture dans le dossier
@@ -289,6 +298,11 @@ const I18N = {
     exportBtn:'Exporter', mCsv:'Tableau (.csv)', mPdf:'Rapport (.pdf)', newGroup:'Nouveau groupe',
     expName:"Nom de l'expérience", expDesc:'Courte description', required:'obligatoire', optional:'facultatif', cancel:'Annuler', create:'Créer le rapport',
     pdfEnglish:'Le rapport est rédigé en anglais, pour pouvoir être transmis tel quel.',
+    folderData:'Comptes de ce dossier', wipe:'Effacer tous les comptes de ce dossier',
+    wipeTitle:'Tout effacer ?', wipeText: p => 'Les comptes, les noms et les groupes du dossier « ' + p.f + ' » seront supprimés (fichier ' + p.s + ' et copie du navigateur). Les photos ne sont pas touchées.',
+    wipeYes:'Effacer', wiped:'Comptes effacés.', noFolder:"Choisissez d'abord un dossier.",
+    restoreTitle:'Copie trouvée dans le navigateur', restoreText: p => 'Le dossier ne contient pas de sauvegarde (' + p.s + '), mais le navigateur en a gardé une copie (' + p.n + ' image(s) comptée(s)). La reprendre ?',
+    restoreYes:'Reprendre la copie', restoreNo:'Repartir de zéro',
     pdfBusy: p => 'Création du rapport… ' + p.i + ' / ' + p.n, pdfDone: p => 'Rapport enregistré : ' + p.f, pdfNoLib:"Le module PDF n'a pas pu se charger (connexion ?).",
     markSize:'Taille des repères', markColor:'Couleur des repères', markNum:'Numéroter les repères', keepZoom:"Garder le zoom en changeant d'image",
     nameSep:'Séparateur du nom final', csvSep:'Séparateur du fichier CSV', space:'espace', csvSemi:'; (Excel en français)', csvComma:', (Excel en anglais)'
@@ -308,6 +322,11 @@ const I18N = {
     exportBtn:'Export', mCsv:'Table (.csv)', mPdf:'Report (.pdf)', newGroup:'New group',
     expName:'Experiment name', expDesc:'Short description', required:'required', optional:'optional', cancel:'Cancel', create:'Create report',
     pdfEnglish:'The report is written in English so it can be shared as is.',
+    folderData:'Counts for this folder', wipe:'Erase all counts for this folder',
+    wipeTitle:'Erase everything?', wipeText: p => 'Counts, names and groups for the folder “' + p.f + '” will be deleted (' + p.s + ' file and browser copy). The photos are not touched.',
+    wipeYes:'Erase', wiped:'Counts erased.', noFolder:'Choose a folder first.',
+    restoreTitle:'Copy found in the browser', restoreText: p => 'The folder has no save file (' + p.s + '), but the browser kept a copy (' + p.n + ' image(s) counted). Restore it?',
+    restoreYes:'Restore the copy', restoreNo:'Start from scratch',
     pdfBusy: p => 'Building the report… ' + p.i + ' / ' + p.n, pdfDone: p => 'Report saved: ' + p.f, pdfNoLib:'The PDF module could not load (offline?).',
     markSize:'Marker size', markColor:'Marker colour', markNum:'Number the markers', keepZoom:'Keep the zoom when changing image',
     nameSep:'Final name separator', csvSep:'CSV separator', space:'space', csvSemi:'; (Excel in French)', csvComma:', (Excel in English)'
@@ -374,6 +393,27 @@ $('cNum').addEventListener('change', e => { S.num = e.target.checked; saveS(); }
 $('cKeepZoom').addEventListener('change', e => { S.keepZoom = e.target.checked; saveS(); });
 $('btnSettings').addEventListener('click', () => { buildSettings(); $('setDlg').showModal(); });
 $('setClose').addEventListener('click', () => $('setDlg').close());
+$('btnWipe').addEventListener('click', async () => {
+  if (!folder){ toast(t('noFolder')); return; }
+  if (!(await ask(t('wipeTitle'), t('wipeText', { f:folder, s:SAVE_FILE }), t('wipeYes'), t('cancel')))) return;
+  clearTimeout(saveTimer); await saving;
+  try{ localStorage.removeItem(localKey()); }catch(e){}
+  if (dir){ try{ await dir.removeEntry(SAVE_FILE); }catch(e){} }
+  const keepIdx = Math.max(0, idx);
+  data = blank(); lastPrefix = lastGroup = ''; for (const k in hist) delete hist[k];
+  idx = -1; $('setDlg').close(); toast(t('wiped'));
+  if (files.length) await show(keepIdx);
+});
+
+// question avec deux réponses, dans le style du site ; résout à vrai pour « oui »
+function ask(title, text, yes, no){
+  return new Promise(res => {
+    const d = $('askDlg'); $('askTitle').textContent = title; $('askText').textContent = text; $('askYes').textContent = yes; $('askNo').textContent = no;
+    const done = v => { $('askYes').onclick = $('askNo').onclick = d.oncancel = null; d.close(); res(v); };
+    $('askYes').onclick = () => done(true); $('askNo').onclick = () => done(false); d.oncancel = e => { e.preventDefault(); done(false); };
+    d.showModal();
+  });
+}
 
 let toastT = null;
 function toast(msg){ const e = $('toast'); e.textContent = msg; e.classList.add('show'); clearTimeout(toastT); toastT = setTimeout(() => e.classList.remove('show'), 3200); }
@@ -424,8 +464,14 @@ $('dirInput').addEventListener('change', async e => {
 async function load(name, list, saved){
   folder = name;
   files = list.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric:true, sensitivity:'base' }));
-  // sauvegarde du dossier ; sinon la copie du navigateur
-  const local = store.get(localKey(), null);
+  // La sauvegarde du dossier fait foi. Si elle manque alors que le navigateur en garde une copie :
+  // dossier accessible en écriture → on demande (le fichier a peut-être été supprimé exprès) ;
+  // sinon (Firefox, Safari) la copie du navigateur est la seule sauvegarde → reprise directe.
+  let local = store.get(localKey(), null);
+  if (!(saved && saved.images) && local && local.images && dir && Object.keys(local.images).length){
+    const n = Object.values(local.images).filter(r => r.marks && r.marks.length).length;
+    if (!(await ask(t('restoreTitle'), t('restoreText', { s:SAVE_FILE, n }), t('restoreYes'), t('restoreNo')))){ try{ localStorage.removeItem(localKey()); }catch(e){} local = null; }
+  }
   data = Object.assign(blank(), saved && saved.images ? saved : local && local.images ? local : {});
   lastPrefix = data.prefix || ''; lastGroup = data.group || '';
   for (const k in hist) delete hist[k];
