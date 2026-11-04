@@ -84,8 +84,8 @@ input[type=text]:focus{outline:none;background:#fff}
 .card{background:var(--paper);border:var(--b) solid var(--ink);box-shadow:var(--b) var(--b) 0 var(--ink);padding:.6rem .7rem}
 .counter{display:flex;align-items:center;gap:.6rem}
 .counter .num{flex:1;text-align:center;line-height:1}
-.counter .num b{display:block;font-size:clamp(2.1rem,4.6vh,3rem);font-variant-numeric:tabular-nums}
-.counter .num span{font-size:.85rem;color:var(--muted);letter-spacing:.1em}
+.counter .num b{display:block;font-size:clamp(2.1rem,4.6vh,3rem);font-variant-numeric:tabular-nums;line-height:.9}
+.counter .num span{display:block;margin-top:-.35em;font-size:clamp(1.5rem,3.2vh,2.1rem);font-weight:700;letter-spacing:.06em;color:#A39A88} /* « CFU » sous le compte, grand, gris clair */
 .counter{padding:.35rem .6rem}
 .counter .btn{width:40px;min-height:36px;padding:0;font-size:1.2rem}
 .lbl{display:block;font-size:1.3rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;margin:.6rem 0 .3rem}
@@ -332,7 +332,7 @@ dialog.pix .row{display:flex;justify-content:flex-end;margin-top:1rem;padding:0 
 (() => {
 'use strict';
 const $ = id => document.getElementById(id);
-const VERSION = 'v19 · 05/11';
+const VERSION = 'v20 · 05/11';
 const SAVE_FILE = 'petri-comptage.json';
 const IMG_RE = /\.(jpe?g|png|webp|gif|bmp|avif)$/i;
 const canWriteFolder = typeof window.showDirectoryPicker === 'function'; // Chrome, Edge : lecture et écriture dans le dossier
