@@ -9,6 +9,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Pixelify+Sans:wght@400;600;700&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <style>
 @font-face{font-family:"ByteBounce";src:url("fonts/ByteBounce.ttf") format("truetype");font-display:swap}
 /* Même style que l'app de capture : fond beige, encre noire, police pixelisée */
@@ -146,6 +147,9 @@ dialog.pix .row{display:flex;justify-content:flex-end;margin-top:1rem;padding:0 
 .menu button{display:block;width:100%;text-align:left;border:0;background:none;padding:.5rem .8rem;min-height:42px}
 .menu button:hover:not([disabled]),.menu button:focus-visible{background:var(--bg);outline:none}
 .menu button[disabled]{opacity:.4;cursor:default}
+.menu .mhead{padding:.45rem .8rem .15rem;font-size:.75rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);border-top:2px dashed var(--ink)}
+.menu .mhead:first-child{border-top:0}
+.chip.plus button{padding:.15rem .6rem;font-weight:700}
 .toast{position:fixed;left:50%;bottom:1rem;transform:translateX(-50%);background:var(--ink);color:var(--paper);padding:.5rem 1rem;z-index:40;display:none;max-width:90vw;box-shadow:var(--b) var(--b) 0 var(--muted)}
 .toast.show{display:block}
 @media (max-height:640px){ .side{gap:.5rem} .card{padding:.45rem .6rem} }
@@ -159,10 +163,14 @@ dialog.pix .row{display:flex;justify-content:flex-end;margin-top:1rem;padding:0 
     <span class="folder" id="folderName"></span>
     <button class="btn" id="btnFolder" type="button" data-i18n="chooseFolder"></button>
     <div class="menuwrap">
-      <button class="btn" id="btnCsv" type="button" data-i18n="exportCsv" aria-haspopup="menu" aria-expanded="false" disabled></button>
+      <button class="btn" id="btnCsv" type="button" data-i18n="exportBtn" aria-haspopup="menu" aria-expanded="false" disabled></button>
       <div class="menu" id="csvMenu" role="menu" hidden>
+        <div class="mhead" data-i18n="mCsv"></div>
         <button type="button" role="menuitem" id="csvHere" data-i18n="csvHere"></button>
         <button type="button" role="menuitem" id="csvElse" data-i18n="csvElse"></button>
+        <div class="mhead" data-i18n="mPdf"></div>
+        <button type="button" role="menuitem" id="pdfHere" data-i18n="csvHere"></button>
+        <button type="button" role="menuitem" id="pdfElse" data-i18n="csvElse"></button>
       </div>
     </div>
     <button class="btn" id="btnSettings" type="button" data-i18n="settings"></button>
@@ -206,7 +214,7 @@ dialog.pix .row{display:flex;justify-content:flex-end;margin-top:1rem;padding:0 
       <button class="btn small" id="btnPrefixAll" type="button" data-i18n="applyAll"></button></div>
     <span class="lbl" data-i18n="group"></span>
     <div class="chips" id="chips"></div>
-    <div class="inline"><input type="text" id="inGroup" autocomplete="off" data-i18n-ph="groupPh">
+    <div class="inline" id="groupAdd" hidden><input type="text" id="inGroup" autocomplete="off" data-i18n-ph="groupPh">
       <button class="btn small" id="btnAddGroup" type="button" data-i18n="add"></button></div>
     <label class="lbl" for="inName" data-i18n="name"></label>
     <input type="text" id="inName" autocomplete="off" data-i18n-ph="namePh">
@@ -233,6 +241,21 @@ dialog.pix .row{display:flex;justify-content:flex-end;margin-top:1rem;padding:0 
   <div class="row"><button class="btn primary" id="setClose" type="button" data-i18n="close"></button></div>
 </dialog>
 
+<dialog class="pix" id="pdfDlg">
+  <form method="dialog" id="pdfForm">
+    <h2 data-i18n="mPdf"></h2>
+    <label class="lbl" for="inExp"><b data-i18n="expName"></b><span data-i18n="required"></span></label>
+    <input type="text" id="inExp" autocomplete="off" required maxlength="120">
+    <label class="lbl" for="inDesc"><b data-i18n="expDesc"></b><span data-i18n="optional"></span></label>
+    <input type="text" id="inDesc" autocomplete="off" maxlength="200">
+    <p class="muted" style="font-size:.8rem;margin:.6rem 0 0" data-i18n="pdfEnglish"></p>
+    <div class="row" style="gap:.7rem">
+      <button class="btn" type="button" id="pdfCancel" data-i18n="cancel"></button>
+      <button class="btn primary" type="submit" id="pdfGo" data-i18n="create"></button>
+    </div>
+  </form>
+</dialog>
+
 <input type="file" id="dirInput" webkitdirectory multiple hidden>
 <div class="toast" id="toast" role="status"></div>
 
@@ -240,7 +263,7 @@ dialog.pix .row{display:flex;justify-content:flex-end;margin-top:1rem;padding:0 
 (() => {
 'use strict';
 const $ = id => document.getElementById(id);
-const VERSION = 'v2 · 04/11';
+const VERSION = 'v4 · 04/11';
 const SAVE_FILE = 'petri-comptage.json';
 const IMG_RE = /\.(jpe?g|png|webp|gif|bmp|avif)$/i;
 const canWriteFolder = typeof window.showDirectoryPicker === 'function'; // Chrome, Edge : lecture et écriture dans le dossier
@@ -256,13 +279,17 @@ const I18N = {
     emptyIntro:"Choisissez le dossier qui contient les photos des boîtes. Les comptes sont enregistrés à chaque changement d'image.",
     reopen: p => 'Rouvrir « ' + p.n + ' »',
     noWrite:"Ce navigateur ne peut pas écrire dans le dossier : la sauvegarde reste dans le navigateur. Pour l'avoir dans le dossier, utilisez Chrome ou Edge.",
-    hint:'Clic : ajouter ou retirer une colonie · molette : zoom · glisser : déplacer · ← → : image',
+    hint:'Clic gauche : ajouter ou retirer une colonie · molette : zoom · clic droit maintenu : déplacer · ← → : image',
     undo:'Annuler', redo:'Rétablir', prefix:'Préfixe de la manip', prefixPh:'ex. : 2026-11-04_E.coli', applyAll:'Partout',
     group:'Groupe', groupPh:'Nouveau groupe…', add:'Ajouter', name:'Nom', namePh:'ex. : 10-3', results:'Résultats', colName:'Nom',
     noImages:"Aucune image trouvée dans ce dossier.", savedFolder:'Enregistré dans le dossier', savedLocal:'Enregistré dans le navigateur',
     saveErr:"Échec de l'enregistrement", csvDone: p => 'Tableau enregistré : ' + p.f, applied:'Préfixe appliqué à toutes les images comptées.',
     loaded: p => p.n + ' images, sauvegarde reprise.', found: p => p.n + ' images trouvées.', langSwitch:'Switch to English', permDenied:"Accès au dossier refusé.",
     csvHere:'Dans le dossier des images', csvElse:'Choisir un autre emplacement…', settings:'Réglages', close:'Fermer',
+    exportBtn:'Exporter', mCsv:'Tableau (.csv)', mPdf:'Rapport (.pdf)', newGroup:'Nouveau groupe',
+    expName:"Nom de l'expérience", expDesc:'Courte description', required:'obligatoire', optional:'facultatif', cancel:'Annuler', create:'Créer le rapport',
+    pdfEnglish:'Le rapport est rédigé en anglais, pour pouvoir être transmis tel quel.',
+    pdfBusy: p => 'Création du rapport… ' + p.i + ' / ' + p.n, pdfDone: p => 'Rapport enregistré : ' + p.f, pdfNoLib:"Le module PDF n'a pas pu se charger (connexion ?).",
     markSize:'Taille des repères', markColor:'Couleur des repères', markNum:'Numéroter les repères', keepZoom:"Garder le zoom en changeant d'image",
     nameSep:'Séparateur du nom final', csvSep:'Séparateur du fichier CSV', space:'espace', csvSemi:'; (Excel en français)', csvComma:', (Excel en anglais)'
   },
@@ -271,13 +298,17 @@ const I18N = {
     emptyIntro:'Choose the folder that holds the dish photos. Counts are saved every time you change image.',
     reopen: p => 'Reopen “' + p.n + '”',
     noWrite:'This browser cannot write into the folder: the save stays in the browser. Use Chrome or Edge to keep it in the folder.',
-    hint:'Click: add or remove a colony · wheel: zoom · drag: move · ← →: image',
+    hint:'Left click: add or remove a colony · wheel: zoom · hold right click: move · ← →: image',
     undo:'Undo', redo:'Redo', prefix:'Experiment prefix', prefixPh:'e.g. 2026-11-04_E.coli', applyAll:'All',
     group:'Group', groupPh:'New group…', add:'Add', name:'Name', namePh:'e.g. 10-3', results:'Results', colName:'Name',
     noImages:'No images found in this folder.', savedFolder:'Saved in the folder', savedLocal:'Saved in the browser',
     saveErr:'Save failed', csvDone: p => 'Table saved: ' + p.f, applied:'Prefix applied to every counted image.',
     loaded: p => p.n + ' images, save restored.', found: p => p.n + ' images found.', langSwitch:'Passer en français', permDenied:'Folder access denied.',
     csvHere:'In the image folder', csvElse:'Choose another location…', settings:'Settings', close:'Close',
+    exportBtn:'Export', mCsv:'Table (.csv)', mPdf:'Report (.pdf)', newGroup:'New group',
+    expName:'Experiment name', expDesc:'Short description', required:'required', optional:'optional', cancel:'Cancel', create:'Create report',
+    pdfEnglish:'The report is written in English so it can be shared as is.',
+    pdfBusy: p => 'Building the report… ' + p.i + ' / ' + p.n, pdfDone: p => 'Report saved: ' + p.f, pdfNoLib:'The PDF module could not load (offline?).',
     markSize:'Marker size', markColor:'Marker colour', markNum:'Number the markers', keepZoom:'Keep the zoom when changing image',
     nameSep:'Final name separator', csvSep:'CSV separator', space:'space', csvSemi:'; (Excel in French)', csvComma:', (Excel in English)'
   }
@@ -497,23 +528,25 @@ $('zIn').addEventListener('click', () => zoomAt(1.5, screenEl.clientWidth/2, scr
 $('zOut').addEventListener('click', () => zoomAt(1/1.5, screenEl.clientWidth/2, screenEl.clientHeight/2));
 $('zFit').addEventListener('click', fit);
 window.addEventListener('resize', () => { if (idx >= 0) fit(); });
-// un clic sans déplacement compte ; au-delà de 5 px, on fait glisser l'image
+// clic gauche : compter (un clic qui a glissé de plus de 6 px est ignoré) ; clic droit maintenu : déplacer l'image ;
+// au doigt (écran tactile) : toucher pour compter, glisser pour déplacer
 let drag = null;
 screenEl.addEventListener('pointerdown', e => {
   if (idx < 0 || e.target.closest('.zoombar, .empty')) return;
-  drag = { id:e.pointerId, x:e.clientX, y:e.clientY, tx, ty, moved:false };
+  if (e.button !== 0 && e.button !== 2) return;
+  drag = { id:e.pointerId, x:e.clientX, y:e.clientY, tx, ty, moved:false, pan: e.button === 2 || e.pointerType === 'touch', count: e.button === 0 };
   screenEl.setPointerCapture(e.pointerId);
 });
 screenEl.addEventListener('pointermove', e => {
   if (!drag || e.pointerId !== drag.id) return;
   const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
-  if (!drag.moved && Math.hypot(dx, dy) > 5){ drag.moved = true; screenEl.classList.add('panning'); }
-  if (drag.moved){ tx = drag.tx + dx; ty = drag.ty + dy; applyView(); }
+  if (!drag.moved && Math.hypot(dx, dy) > 6){ drag.moved = true; if (drag.pan) screenEl.classList.add('panning'); }
+  if (drag.moved && drag.pan){ tx = drag.tx + dx; ty = drag.ty + dy; applyView(); }
 });
 const endDrag = e => {
   if (!drag || e.pointerId !== drag.id) return;
   const d = drag; drag = null; screenEl.classList.remove('panning');
-  if (!d.moved && e.type === 'pointerup' && e.button === 0) clickAt(e.clientX, e.clientY);
+  if (!d.moved && d.count && e.type === 'pointerup') clickAt(e.clientX, e.clientY);
 };
 screenEl.addEventListener('pointerup', endDrag); screenEl.addEventListener('pointercancel', endDrag);
 screenEl.addEventListener('contextmenu', e => e.preventDefault());
@@ -552,12 +585,17 @@ $('btnPrefixAll').addEventListener('click', () => {
 function addGroup(){
   const v = $('inGroup').value.trim(); if (!v) return;
   if (!data.groups.includes(v)) data.groups.push(v);
-  $('inGroup').value = '';
+  showGroupAdd(false);
   const r = rec(); if (r){ r.group = lastGroup = v; }
   changed();
 }
+function showGroupAdd(on){ $('groupAdd').hidden = !on; if (on) $('inGroup').focus(); else $('inGroup').value = ''; }
 $('btnAddGroup').addEventListener('click', addGroup);
-$('inGroup').addEventListener('keydown', e => { if (e.key === 'Enter'){ e.preventDefault(); addGroup(); } });
+$('inGroup').addEventListener('keydown', e => {
+  if (e.key === 'Enter'){ e.preventDefault(); addGroup(); }
+  else if (e.key === 'Escape'){ e.preventDefault(); showGroupAdd(false); }
+});
+$('inGroup').addEventListener('blur', () => setTimeout(() => { if (!$('inGroup').value.trim() && document.activeElement !== $('btnAddGroup')) showGroupAdd(false); }, 150));
 function renderChips(){
   const box = $('chips'), r = rec(); box.innerHTML = '';
   data.groups.forEach(g => {
@@ -569,6 +607,11 @@ function renderChips(){
     x.addEventListener('click', () => { data.groups = data.groups.filter(v => v !== g); if (lastGroup === g) lastGroup = ''; changed(); }); // les images déjà nommées gardent leur groupe
     c.append(b, x); box.appendChild(c);
   });
+  // « + » en fin de liste : fait apparaître le champ pour un nouveau groupe
+  const plus = document.createElement('span'); plus.className = 'chip plus';
+  const pb = document.createElement('button'); pb.type = 'button'; pb.textContent = '+'; pb.setAttribute('aria-label', t('newGroup')); pb.title = t('newGroup');
+  pb.addEventListener('click', () => showGroupAdd($('groupAdd').hidden));
+  plus.appendChild(pb); box.appendChild(plus);
 }
 
 /* ---------- Affichage ---------- */
@@ -611,27 +654,124 @@ function csvText(){
 }
 const csvName = () => 'comptage_' + folder.replace(/[^\w.-]+/g, '_') + '.csv';
 async function writeTo(fh, text){ const w = await fh.createWritable(); await w.write(text); await w.close(); }
-function openMenu(on){ $('csvMenu').hidden = !on; $('btnCsv').setAttribute('aria-expanded', String(on)); if (on) $('csvHere').disabled = !dir; }
+function openMenu(on){ $('csvMenu').hidden = !on; $('btnCsv').setAttribute('aria-expanded', String(on)); if (on) $('csvHere').disabled = $('pdfHere').disabled = !dir; }
+// Où enregistrer : dossier des images (here), fenêtre « Enregistrer sous » (Chrome, Edge), sinon téléchargement.
+// La fenêtre doit s'ouvrir juste après le clic : on choisit donc l'emplacement avant de préparer le contenu.
+async function pickTarget(fname, mime, ext, here){
+  if (here) return { fh: await dir.getFileHandle(fname, { create:true }), name:fname };
+  if (typeof window.showSaveFilePicker === 'function'){
+    try{
+      const fh = await window.showSaveFilePicker({ suggestedName:fname, startIn: dir || 'documents', types:[{ description:ext.toUpperCase(), accept:{ [mime]:['.' + ext] } }] });
+      return { fh, name:fh.name };
+    }catch(e){ if (e && e.name === 'AbortError') return null; }
+  }
+  return { name:fname, mime };
+}
+async function writeTarget(tg, content){
+  if (tg.fh){ await writeTo(tg.fh, content); return tg.name; }
+  const a = document.createElement('a'); a.href = URL.createObjectURL(content instanceof Blob ? content : new Blob([content], { type:tg.mime })); a.download = tg.name;
+  document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 20000);
+  return tg.name;
+}
 $('btnCsv').addEventListener('click', e => { e.stopPropagation(); openMenu($('csvMenu').hidden); });
 document.addEventListener('click', e => { if (!e.target.closest('.menuwrap')) openMenu(false); });
 document.addEventListener('keydown', e => { if (e.key === 'Escape') openMenu(false); });
-$('csvHere').addEventListener('click', async () => {
+async function exportCsv(here){
   openMenu(false); await saveNow();
-  try{ await writeTo(await dir.getFileHandle(csvName(), { create:true }), csvText()); toast(t('csvDone', { f:csvName() })); }
+  try{ const tg = await pickTarget(csvName(), 'text/csv', 'csv', here); if (tg) toast(t('csvDone', { f: await writeTarget(tg, csvText()) })); }
   catch(e){ toast(t('saveErr')); }
-});
-$('csvElse').addEventListener('click', async () => {
-  openMenu(false); await saveNow();
-  const csv = csvText(), fname = csvName();
-  if (typeof window.showSaveFilePicker === 'function'){ // Chrome, Edge : fenêtre « Enregistrer sous »
-    try{
-      const fh = await window.showSaveFilePicker({ suggestedName:fname, startIn: dir || 'documents', types:[{ description:'CSV', accept:{ 'text/csv':['.csv'] } }] });
-      await writeTo(fh, csv); toast(t('csvDone', { f:fh.name })); return;
-    }catch(e){ if (e && e.name === 'AbortError') return; }
+}
+$('csvHere').addEventListener('click', () => exportCsv(true));
+$('csvElse').addEventListener('click', () => exportCsv(false));
+
+/* Rapport PDF, volontairement sobre (Helvetica, noir et blanc) pour être transmis tel quel :
+   deux images par page A4, chacune entière avec ses repères (sans numéros), suivie d'un tableau Nom / CFU. */
+async function reportImage(f, r){
+  const file = f.file || await f.handle.getFile(), u = URL.createObjectURL(file);
+  try{
+    const img = new Image(); await new Promise((res, rej) => { img.onload = res; img.onerror = rej; img.src = u; });
+    const k = Math.min(1, 2000 / img.naturalWidth), w = Math.round(img.naturalWidth*k), h = Math.round(img.naturalHeight*k);
+    const c = document.createElement('canvas'); c.width = w; c.height = h; const x = c.getContext('2d');
+    x.drawImage(img, 0, 0, w, h);
+    const rad = Math.max(5, w * .008), lw = Math.max(1.5, w * .0022);
+    r.marks.forEach(([mx, my]) => {
+      x.beginPath(); x.arc(mx*w, my*h, rad, 0, 2*Math.PI); x.lineWidth = lw*2.4; x.strokeStyle = '#000'; x.stroke();
+      x.beginPath(); x.arc(mx*w, my*h, rad, 0, 2*Math.PI); x.lineWidth = lw; x.strokeStyle = S.color; x.stroke();
+    });
+    return { url:c.toDataURL('image/jpeg', .88), w, h };
+  } finally { URL.revokeObjectURL(u); }
+}
+// le rapport est toujours rédigé en anglais, quelle que soit la langue de la page
+async function buildReport(exp, desc){
+  const { jsPDF } = window.jspdf, doc = new jsPDF({ unit:'mm', format:'a4', orientation:'portrait' });
+  const PW = 210, PH = 297, M = 15, CW = PW - 2*M, items = files.filter(f => data.images[f.name]);
+  const date = new Date().toLocaleDateString('en-GB', { year:'numeric', month:'long', day:'numeric' });
+  const header = () => {
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(11); doc.setTextColor(0);
+    doc.text(doc.splitTextToSize('Count report: ' + exp, CW - 45)[0], M, 12);
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(9); doc.setTextColor(90);
+    if (desc) doc.text(doc.splitTextToSize(desc, CW)[0], M, 17);
+    doc.text(date, PW - M, 12, { align:'right' });
+    doc.setDrawColor(160); doc.setLineWidth(.2); doc.line(M, 20, PW - M, 20);
+  };
+  header();
+  let y = 26, n = 0;
+  for (const f of items){
+    toast(t('pdfBusy', { i:++n, n:items.length }));
+    const r = data.images[f.name], im = await reportImage(f, r);
+    let iw = CW, ih = CW * im.h / im.w; if (ih > 100){ ih = 100; iw = ih * im.w / im.h; }
+    const blockH = ih + 6 + 16;
+    if (y + blockH > PH - 14){ doc.addPage(); header(); y = 26; }
+    doc.addImage(im.url, 'JPEG', M + (CW - iw)/2, y, iw, ih);
+    y += ih + 4;
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(8); doc.setTextColor(110);
+    doc.text('Image: ' + f.name, M, y); y += 2;
+    // tableau 2 × 2 : en-têtes, puis le nom et le nombre de colonies
+    const c1 = CW - 35, rh = 7;
+    doc.setDrawColor(0); doc.setLineWidth(.25); doc.setFillColor(235, 235, 235);
+    doc.rect(M, y, CW, rh, 'FD'); doc.rect(M, y + rh, CW, rh); doc.line(M + c1, y, M + c1, y + 2*rh);
+    doc.setTextColor(0); doc.setFontSize(10); doc.setFont('helvetica', 'bold');
+    doc.text('Name', M + 2, y + 4.8); doc.text('CFU', M + CW - 2, y + 4.8, { align:'right' });
+    doc.setFont('helvetica', 'normal');
+    const name = doc.splitTextToSize(finalName(r) || stem(f.name), c1 - 4)[0];
+    doc.text(name, M + 2, y + rh + 4.8); doc.text(String(r.marks.length), M + CW - 2, y + rh + 4.8, { align:'right' });
+    y += 2*rh + 10;
   }
-  const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([csv], { type:'text/csv' })); a.download = fname;
-  document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 20000);
-  toast(t('csvDone', { f:fname })); // autres navigateurs : téléchargement classique
+  const pages = doc.getNumberOfPages();
+  for (let i = 1; i <= pages; i++){
+    doc.setPage(i); doc.setFont('helvetica', 'normal'); doc.setFontSize(8); doc.setTextColor(110);
+    doc.text('Page ' + i + ' / ' + pages, M, PH - 8);
+    doc.text('Captured using Petri-Scanner and counted using Petri-Counter', PW - M, PH - 8, { align:'right' });
+  }
+  return doc.output('blob');
+}
+// clic sur « Rapport » : fenêtre pour le nom de l'expérience (obligatoire) et une courte description
+let pdfHereTarget = false;
+function askPdf(here){
+  openMenu(false);
+  if (!window.jspdf){ toast(t('pdfNoLib')); return; }
+  pdfHereTarget = here;
+  const rp = data.report || {}; $('inExp').value = rp.name || ''; $('inDesc').value = rp.desc || '';
+  $('pdfDlg').showModal(); $('inExp').focus();
+}
+$('pdfHere').addEventListener('click', () => askPdf(true));
+$('pdfElse').addEventListener('click', () => askPdf(false));
+$('pdfCancel').addEventListener('click', () => $('pdfDlg').close());
+$('pdfForm').addEventListener('submit', async e => {
+  e.preventDefault();
+  const exp = $('inExp').value.trim(), desc = $('inDesc').value.trim();
+  if (!exp){ $('inExp').focus(); return; }
+  $('pdfDlg').close();
+  data.report = { name:exp, desc }; // repris la prochaine fois pour ce dossier
+  try{
+    // REPORT-AAAA-MM-JJ-nom de l'expérience.pdf (accents retirés, caractères interdits dans un nom de fichier remplacés)
+    const d = new Date(), day = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+    const safe = exp.normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^\w.-]+/g, '_').replace(/^_+|_+$/g, '');
+    const tg = await pickTarget('REPORT-' + day + '-' + safe + '.pdf', 'application/pdf', 'pdf', pdfHereTarget);
+    if (!tg) return;
+    await saveNow();
+    toast(t('pdfDone', { f: await writeTarget(tg, await buildReport(exp, desc)) }));
+  }catch(err){ toast(t('saveErr')); }
 });
 
 /* ---------- Clavier ---------- */
