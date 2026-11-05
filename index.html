@@ -451,19 +451,20 @@ body.manual .meters,body.manual .btn.lens{display:none}
     <p id="mailInfo"></p>
     <p class="note" id="mailHow"></p>
     <div class="parts" id="mailParts"></div>
+    <p class="note" id="mailAltBox" hidden><span data-i18n="mailAltQ"></span> <button class="btn" id="mailAlt" type="button" data-i18n="mailAlt"></button></p>
     <div class="row"><button class="btn" id="mailCopy" type="button" data-i18n="mailCopy"></button><button class="btn" id="mailClose" type="button" data-i18n="close"></button></div>
   </div>
 </dialog>
 
 <div class="toast" id="toast" role="status"></div>
 
-<script src="mascot.js?v38"></script> <!-- ?vNN : à changer avec APP_VERSION, pour contourner le cache de GitHub Pages -->
-<script src="demo.js?v38"></script>
+<script src="mascot.js?v39"></script> <!-- ?vNN : à changer avec APP_VERSION, pour contourner le cache de GitHub Pages -->
+<script src="demo.js?v39"></script>
 <script>
 (() => {
 'use strict';
 const $ = id => document.getElementById(id);
-const APP_VERSION = 'v38 · 05/11'; // à incrémenter à chaque publication
+const APP_VERSION = 'v39 · 05/11'; // à incrémenter à chaque publication
 $('ver').textContent = APP_VERSION;
 
 /* ---------- Mascotte (dessin et animation dans mascot.js) ---------- */
@@ -526,7 +527,7 @@ const I18N = {
     errRatio:'Bases differ in size: check the marker IDs.', need3:'At least 3 markers are needed in total (on either base).', noMarkers:'No markers found. Keep the base empty and well lit.',
     partial: p => p.base + ': ' + p.n + '/4 markers.',
     calibSaved:'Calibration saved.', refocus:'Blurry: refocusing.', lockFail:'Focus lock failed, autofocus kept.',
-    lockOk:'Focus locked.', bgUpdated:'Background updated.', bgAuto:'Background re-measured automatically.', socleMoved:'Base moved: circles realigned.', lensT: p => 'Lens: ' + p.l, needCalib:' Calibration needed.',
+    lockOk:'Focus locked.', bgUpdated:'Background updated.', bgAuto:'Background re-measured automatically.', socleMoved:'Base moved: circles realigned.', lensT: p => 'Lens: ' + p.l, switching:'Switching lens…', needCalib:' Calibration needed.',
     shared: p => plural(p.n, 'photo', 'photos') + ' sent.', shareFail: p => 'Sharing failed: ' + p.e,
     shareNA:'Gallery sharing is not available here. Use the .zip.', zipNA:'The .zip module did not load (offline?).',
     zipReady: p => 'Archive ready: ' + p.f, exportFail: p => 'Export failed: ' + p.e, noFullscreen:'Full screen is not available here.',
@@ -540,6 +541,7 @@ const I18N = {
     mailBadAddr:'Enter a valid email address.', mailBusy:'Preparing…',
     mailInfo: p => plural(p.n, 'photo', 'photos') + ', ' + p.mb + ' MB' + (p.parts > 1 ? ', in ' + p.parts + ' parts.' : '.'),
     mailHowShare: p => 'Tap each part, choose your mail app (Outlook, Gmail, Mail…). The address ' + p.to + ' is copied: in the "To" field, long-press then Paste.',
+    mailAltQ:"Mail app doesn't open after you pick it (some Xiaomi phones)?", mailAlt:'Download and attach instead',
     mailHowDownload: p => 'This device cannot attach files directly: the .zip files are downloaded and a new email to ' + p.to + ' opens. Attach them by hand.',
     mailPart: p => 'Send part ' + p.i + '/' + p.n + ' (' + p.mb + ' MB)', mailPartOne: p => 'Send (' + p.mb + ' MB)',
     mailSubject: p => 'Petri·Capture – ' + p.date + (p.parts > 1 ? ' (' + p.i + '/' + p.parts + ')' : ''),
@@ -680,28 +682,30 @@ async function startCamera(){
       } else throw e;
     }
     track = stream.getVideoTracks()[0];
-    // par défaut : la plus haute résolution que l'objectif annonce
-    if (!res && !demo){
-      try{
-        const c = track.getCapabilities ? track.getCapabilities() : {};
-        if (c.width && c.height && c.width.max && c.height.max) await track.applyConstraints({ width:{ ideal:c.width.max }, height:{ ideal:c.height.max } });
-      }catch(e){}
-    }
-    // zoom demandé (vue « ×2, ×3… » du bouton Objectif) : sur beaucoup de téléphones, c'est ainsi qu'on passe au téléobjectif
+    // Réglages de la caméra en UN SEUL appel, et seulement ce qui doit changer : sur certains téléphones (Xiaomi…),
+    // chaque applyConstraints reconfigure le capteur et prend jusqu'à une seconde.
+    // - résolution : la plus haute que l'objectif annonce (par défaut) ;
+    // - zoom demandé (vue « ×2, ×3… » du bouton Objectif : souvent l'accès au téléobjectif) ;
+    // - mise au point continue.
     curZoom = 1;
-    try{
-      const zc = !demo && track.getCapabilities ? track.getCapabilities().zoom : null;
-      if (zc && settings.zoom > 1){ curZoom = Math.min(zc.max, Math.max(zc.min, settings.zoom)); await track.applyConstraints({ advanced:[{ zoom:curZoom }] }); }
-      else if (zc && zc.min <= 1 && zc.max >= 1) await track.applyConstraints({ advanced:[{ zoom:1 }] });
-    }catch(e){ curZoom = 1; }
+    if (!demo){
+      try{
+        const c = track.getCapabilities ? track.getCapabilities() : {}, cur = track.getSettings ? track.getSettings() : {};
+        const want = {}, adv = {};
+        if (!res && c.width && c.height && c.width.max && c.height.max && (cur.width || 0) < c.width.max * .95){ want.width = { ideal:c.width.max }; want.height = { ideal:c.height.max }; }
+        if (c.zoom){
+          const z = settings.zoom > 1 ? Math.min(c.zoom.max, Math.max(c.zoom.min, settings.zoom)) : (c.zoom.min <= 1 && c.zoom.max >= 1 ? 1 : null);
+          if (z !== null){ curZoom = Math.max(1, z); if (Math.abs((cur.zoom || 1) - z) > .01) adv.zoom = z; }
+        }
+        if (c.focusMode && c.focusMode.includes('continuous') && cur.focusMode !== 'continuous') adv.focusMode = 'continuous';
+        if (Object.keys(adv).length) want.advanced = [adv];
+        if (Object.keys(want).length) await track.applyConstraints(want);
+      }catch(e){ curZoom = 1; }
+    }
     if (curZoom !== settings.zoom){ settings.zoom = curZoom; store.set('petri.settings', settings); }
     video.srcObject = stream;
     await video.play().catch(() => {});
     await new Promise(r => { if (video.videoWidth) r(); else video.onloadedmetadata = () => r(); });
-    try{
-      const caps = track.getCapabilities ? track.getCapabilities() : {};
-      if (caps.focusMode && caps.focusMode.includes('continuous')) await track.applyConstraints({ advanced:[{ focusMode:'continuous' }] });
-    }catch(e){}
     onVideoSize();
     $('start').classList.add('hidden');
     listCameras();
@@ -1724,6 +1728,7 @@ async function buildParts(job){
   $('mailInfo').textContent = t('mailInfo', { n:recs.length, mb:mb(total), parts:groups.length });
   $('mailHow').textContent = gallery ? t('galleryHow') : t(mode === 'download' ? 'mailHowDownload' : 'mailHowShare', { to:addr });
   $('mailCopy').hidden = gallery;
+  $('mailAltBox').hidden = gallery || mode === 'download'; // repli : télécharger puis joindre à la main
   const box = $('mailParts'); box.innerHTML = '';
   mailParts.forEach((p, i) => {
     const b = document.createElement('button'); b.type = 'button'; b.className = 'btn' + (i === 0 ? ' primary' : '');
@@ -1733,6 +1738,24 @@ async function buildParts(job){
   $('mailStep1').hidden = true; $('mailStep2').hidden = false;
   if (!$('mailDlg').open) $('mailDlg').showModal();
 }
+// téléchargement de fichiers (plusieurs photos réunies dans un .zip) puis nouveau message à l'adresse choisie
+async function downloadAndMail(p, addr){
+  let files = p.files;
+  if (files.length > 1 && window.JSZip){
+    const zip = new JSZip(); files.forEach(f => zip.file(f.name, f, { binary:true }));
+    const blob = await zip.generateAsync({ type:'blob', compression:'STORE' });
+    files = [new File([blob], 'petri_' + dayOf(p.ids[0]) + '_' + hm(p.ids[0]) + '.zip', { type:'application/zip' })];
+  }
+  files.forEach(f => { const u = URL.createObjectURL(f), a = document.createElement('a'); a.href = u; a.download = f.name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(u), 30000); });
+  setTimeout(() => { location.href = 'mailto:' + encodeURIComponent(addr) + '?subject=' + encodeURIComponent(p.subject) + '&body=' + encodeURIComponent(p.body); }, 600);
+}
+$('mailAlt').addEventListener('click', async () => {
+  if (!mailJob) return;
+  const btn = $('mailAlt'); btn.disabled = true;
+  try{ for (const p of mailParts){ await downloadAndMail(p, mailJob.addr); } await markExported(mailParts.flatMap(p => p.ids)); refreshCount(); }
+  catch(e){ toast(t('exportFail', { e:e.message || e })); }
+  btn.disabled = false;
+});
 async function sendPart(p, b){
   const { mode, addr } = mailJob;
   try{
@@ -1801,11 +1824,15 @@ bindCheck('cMeters', 'meters', () => $('meters').classList.toggle('hidden', !set
 $('meters').classList.toggle('hidden', !settings.meters);
 $('tOk').addEventListener('click', () => { initAudio(); const s = settings.sound; settings.sound = true; sounds.ok(); settings.sound = s; });
 $('tErr').addEventListener('click', () => { initAudio(); const s = settings.sound; settings.sound = true; sounds.err(); settings.sound = s; });
-function useCamera(id, label, zoom){
+let switching = false; // un changement d'objectif à la fois : les appuis répétés pendant le changement sont ignorés
+async function useCamera(id, label, zoom){
+  if (switching) return;
+  switching = true; $('btnLens').disabled = true;
   settings.deviceId = id; settings.zoom = curZoom = zoom || 1; store.set('petri.settings', settings);
   calib = store.get(calibKey(), null);
+  setStatus('busy', T('switching'), label || '', []); // retour immédiat pendant que la caméra se reconfigure
   if (label) toast(t('lensT', { l:label }) + (calib ? '' : t('needCalib')));
-  startCamera();
+  try{ await startCamera(); } finally { switching = false; $('btnLens').disabled = false; }
 }
 $('camSelect').addEventListener('change', e => useCamera(e.target.value));
 $('btnLens').addEventListener('click', () => {
