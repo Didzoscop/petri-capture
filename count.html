@@ -347,7 +347,7 @@ dialog.pix .row{display:flex;justify-content:flex-end;margin-top:1rem;padding:0 
 (() => {
 'use strict';
 const $ = id => document.getElementById(id);
-const VERSION = 'v21 · 06/11';
+const VERSION = 'v22 · 06/11';
 const SAVE_FILE = 'petri-comptage.json';
 const IMG_RE = /\.(jpe?g|png|webp|gif|bmp|avif)$/i;
 const canWriteFolder = typeof window.showDirectoryPicker === 'function'; // Chrome, Edge : lecture et écriture dans le dossier
@@ -658,7 +658,7 @@ window.addEventListener('resize', () => { if (idx >= 0) fit(); });
 // au doigt (écran tactile) : toucher pour compter, glisser pour déplacer
 let drag = null;
 screenEl.addEventListener('pointerdown', e => {
-  if (idx < 0 || e.target.closest('.zoombar, .empty')) return;
+  if (idx < 0 || e.target.closest('.zoombar, .platebar, .empty')) return; // clic sur un bouton posé sur l'image : pas une colonie
   if (e.button !== 0 && e.button !== 2) return;
   if (adjusting && e.button === 0){ // réglage des cercles : bord = taille, intérieur = position
     const b = screenEl.getBoundingClientRect(), s = base*zoom, px = (e.clientX - b.left - tx) / s, py = (e.clientY - b.top - ty) / s;
