@@ -362,7 +362,7 @@ body.manual .meters,body.manual .btn.lens{display:none}
     <div class="group-title" data-gicon="checks"><span data-i18n="grpChecks"></span></div>
     <label class="check"><input type="checkbox" id="cLid"> <span data-i18n="cLid"></span></label>
     <label class="check"><input type="checkbox" id="cSharp"> <span data-i18n="cSharp"></span></label>
-    <label class="check"><input type="checkbox" id="cLock"> <span data-i18n="cLock"></span></label>
+    <label class="check"><input type="checkbox" id="cMidScan"> <span data-i18n="cMidScan"></span></label>
     <label class="check"><input type="checkbox" id="cMeters"> <span data-i18n="cMeters"></span></label>
     <label class="check"><input type="checkbox" id="cSound"> <span data-i18n="cSound"></span></label>
     <div class="row"><button class="btn" id="tOk" type="button" data-i18n="tOk"></button><button class="btn" id="tErr" type="button" data-i18n="tErr"></button></div>
@@ -458,13 +458,13 @@ body.manual .meters,body.manual .btn.lens{display:none}
 
 <div class="toast" id="toast" role="status"></div>
 
-<script src="mascot.js?v39"></script> <!-- ?vNN : à changer avec APP_VERSION, pour contourner le cache de GitHub Pages -->
-<script src="demo.js?v39"></script>
+<script src="mascot.js?v40"></script> <!-- ?vNN : à changer avec APP_VERSION, pour contourner le cache de GitHub Pages -->
+<script src="demo.js?v40"></script>
 <script>
 (() => {
 'use strict';
 const $ = id => document.getElementById(id);
-const APP_VERSION = 'v39 · 05/11'; // à incrémenter à chaque publication
+const APP_VERSION = 'v40 · 06/11'; // à incrémenter à chaque publication
 $('ver').textContent = APP_VERSION;
 
 /* ---------- Mascotte (dessin et animation dans mascot.js) ---------- */
@@ -475,7 +475,7 @@ const video = $('video'), svg = $('overlay');
 const SVGNS = 'http://www.w3.org/2000/svg';
 
 /* ---------- Réglages persistants ---------- */
-const DEFAULTS = { v:2, sens:20, presence:20, stableMs:600, motionTol:5, focusMs:1500, lockFocus:false, requireLid:true, sharpCheck:true, meters:true, sound:true, deviceId:'', zoom:1, calibMode:'aruco', lang:'en', resolution:'max', email:'', sessionGap:30, mailQuality:'medium' };
+const DEFAULTS = { v:3, midScan:false, sens:20, presence:20, stableMs:400, motionTol:5, focusMs:1500, lockFocus:false, requireLid:true, sharpCheck:true, meters:true, sound:true, deviceId:'', zoom:1, calibMode:'aruco', lang:'en', resolution:'max', email:'', sessionGap:30, mailQuality:'medium' };
 const store = {
   get(k, d){ try{ const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; }catch(e){ return d; } },
   set(k, v){ try{ localStorage.setItem(k, JSON.stringify(v)); }catch(e){} }
@@ -483,6 +483,8 @@ const store = {
 const settings = Object.assign({}, DEFAULTS, store.get('petri.settings', {}));
 // v2 : boîte tenue à la main devant le socle → plus de tolérance au mouvement, mise au point à chaque boîte
 if ((settings.v || 0) < 2){ Object.assign(settings, { v:2, stableMs:600, motionTol:5, lockFocus:false }); store.set('petri.settings', settings); }
+// v3 : mise au point une seule fois au démarrage, prise de vue plus rapide
+if (settings.v < 3){ if (settings.stableMs === 600) settings.stableMs = 400; settings.v = 3; settings.midScan = false; store.set('petri.settings', settings); }
 let curZoom = settings.zoom || 1; // zoom réellement appliqué (1 si l'objectif ne le permet pas)
 const calibKey = () => 'petri.calib' + (settings.deviceId ? '.' + settings.deviceId : '') + (curZoom > 1 ? '@' + curZoom : ''); // cadrage différent : calibration à part
 let calib = store.get(calibKey(), store.get('petri.calib', null)); // {dish:{h}, lid:{h}, aspect, source}, un par objectif (voir « Socles : géométrie »)
@@ -500,7 +502,7 @@ const I18N = {
     sStable:'Wait after detection', sMotion:'Motion tolerance', sMotionHelp:'Higher accepts more motion (vibration, hands nearby). Compare with the Motion meter.',
     sFocus:'Focus time', sFocusHelp:'The sharpest frame in this time is kept.',
     grpChecks:'Checks', cLid:'Lid base: include the lid circle in the photo', cSharp:'Reject blurry images',
-    cLock:'Lock focus after the first photo (faster)', cMeters:'Show meters', cSound:'Sounds',
+    cMidScan:'Refocus and re-check the bases during the scan (slower; off: focus once at the start)', cMeters:'Show meters', cSound:'Sounds',
     tOk:'Test success sound', tErr:'Test error sound', grpCamera:'Camera', btnRef:'Retake empty background', btnReset:'Restore default settings', resetQ:'Restore the default detection settings? Calibration, camera, language and e-mail are kept.',
     grpCalib:'Calibration', selCalib:'Calibration mode', optAruco:'Automatic: ArUco markers', optManual:'Manual: place circles',
     selCalibHelp:'Used by Calibrate and at start. In automatic mode, manual stays available if markers are not found.',
@@ -527,7 +529,7 @@ const I18N = {
     errRatio:'Bases differ in size: check the marker IDs.', need3:'At least 3 markers are needed in total (on either base).', noMarkers:'No markers found. Keep the base empty and well lit.',
     partial: p => p.base + ': ' + p.n + '/4 markers.',
     calibSaved:'Calibration saved.', refocus:'Blurry: refocusing.', lockFail:'Focus lock failed, autofocus kept.',
-    lockOk:'Focus locked.', bgUpdated:'Background updated.', bgAuto:'Background re-measured automatically.', socleMoved:'Base moved: circles realigned.', lensT: p => 'Lens: ' + p.l, switching:'Switching lens…', needCalib:' Calibration needed.',
+    lockOk:'Focus locked.', bgUpdated:'Background updated.', bgAuto:'Background re-measured automatically.', socleMoved:'Base moved: circles realigned.', lensT: p => 'Lens: ' + p.l, resetBg:'Reset background', focusStart:'Focusing on the base…', switching:'Switching lens…', needCalib:' Calibration needed.',
     shared: p => plural(p.n, 'photo', 'photos') + ' sent.', shareFail: p => 'Sharing failed: ' + p.e,
     shareNA:'Gallery sharing is not available here. Use the .zip.', zipNA:'The .zip module did not load (offline?).',
     zipReady: p => 'Archive ready: ' + p.f, exportFail: p => 'Export failed: ' + p.e, noFullscreen:'Full screen is not available here.',
@@ -657,7 +659,9 @@ function toast(msg){
   const t = $('toast'); t.textContent = msg; t.classList.add('show');
   clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove('show'), 3500);
 }
-const runActions = () => [{ label:T('photoNow'), fn: manualCapture }];
+const runActions = () => [{ label:T('photoNow'), fn: manualCapture }, { label:T('resetBg'), fn: resetBackground }];
+// débloque en un geste si l'app croit voir une boîte sur un socle vide : reprend le fond tout de suite
+async function resetBackground(){ if (mode !== 'run' || state === 'focusing' || state === 'saving') return; await takeReference(true); toEmpty(); toast(t('bgUpdated')); }
 
 /* ---------- Caméra ---------- */
 // mode démo (bouton de l'accueil ou adresse avec ?demo) : fausse caméra de demo.js, pour essayer l'app sans caméra
@@ -1277,6 +1281,7 @@ async function startRun(silent){
   autoRun++; leaveManual();
   calib.aspect = W/H; store.set(calibKey(), calib);
   buildMasks(); mode = 'run';
+  if (!settings.midScan) await focusOnce(); // mise au point unique, avant de mesurer le fond (qui doit être vu net, comme pendant le scan)
   await takeReference();
   state = 'empty'; lastMsg = null; drawOverlay();
   setStatus('wait', T('ready'), placeMsg, runActions());
@@ -1406,7 +1411,7 @@ function loop(){
   motionAvg = motionAvg*.6 + a.motion*.4; // mouvement lissé : une main qui tient une boîte tremble toujours un peu
   // Contrôle rapide des marqueurs quand l'image est calme (toutes les 3 s) : socle déplacé → cercles recalés ;
   // marqueurs du socle visibles alors que la zone paraît occupée → le socle est vide, le fond de référence est faux.
-  if ((state === 'empty' || state === 'wait_removal' || state === 'retry') && motionAvg < MOTION_T && now - tHeal > 3000){
+  if (settings.midScan && (state === 'empty' || state === 'wait_removal' || state === 'retry') && motionAvg < MOTION_T && now - tHeal > 3000){ // seulement si activé dans les réglages
     tHeal = now;
     if (checkSocle(a.fDish > P)) return; // fond repris seulement si la zone paraît occupée alors que le socle est vide
   }
@@ -1429,7 +1434,7 @@ function loop(){
       if (motionAvg > MOTION_T) tSince = now;
       if (now - tSince >= settings.stableMs){
         // dernier contrôle avant la photo : si les marqueurs du socle sont lisibles, il n'y a pas de boîte (fond faux)
-        if (checkSocle(true)) break;
+        if (settings.midScan && checkSocle(true)) break;
         beginFocus(now);
       }
       break;
@@ -1447,7 +1452,7 @@ function loop(){
         }
         // double contrôle : avec la mise au point verrouillée, l'image doit rester aussi nette qu'à la première photo
         // (la netteté dépend du contenu de chaque boîte : on ne refait la mise au point que pour une image vraiment floue)
-        if (focusLocked){ const m = medianSharp(); if (m > 0 && bestSharp < m*.45){ unlockFocus(); toast(t('refocus')); beginFocus(now); break; } }
+        if (focusLocked && settings.midScan){ const m = medianSharp(); if (m > 0 && bestSharp < m*.45){ unlockFocus(); toast(t('refocus')); beginFocus(now); break; } }
         const med = medianSharp();
         if (!focusLocked && settings.sharpCheck && med > 0 && bestSharp < med*.45){ fail(T('failBlur'), T('failBlurD', { v:Math.round(bestSharp), m:Math.round(med) })); break; }
         save();
@@ -1489,7 +1494,24 @@ function toEmpty(){
   state = 'empty'; tEmptySince = 0; drawOverlay();
   setStatus('wait', T('ready'), placeMsg, runActions());
 }
-const QUICK_MS = 500;
+const QUICK_MS = 300;
+// Mise au point unique au démarrage : sur le centre du socle de la boîte, puis verrouillée (Android) ;
+// sur iPhone, Safari ne permet ni de viser ni de verrouiller : l'autofocus de l'appareil continue seul.
+async function focusOnce(){
+  setStatus('busy', T('focusStart'), T('keepEmpty'), []);
+  unlockFocus();
+  try{
+    const caps = track.getCapabilities ? track.getCapabilities() : {}, adv = {};
+    if (caps.focusMode && caps.focusMode.includes('single-shot')) adv.focusMode = 'single-shot';
+    if (caps.pointsOfInterest !== undefined){ const c = project(calib.dish.h, 0, 0); adv.pointsOfInterest = [{ x:c.x, y:c.y }]; }
+    if (Object.keys(adv).length) await track.applyConstraints({ advanced:[adv] });
+    await new Promise(r => setTimeout(r, 1200));
+    const cur = track.getSettings ? track.getSettings() : {};
+    if (caps.focusMode && caps.focusMode.includes('manual') && cur.focusDistance !== undefined)
+      await track.applyConstraints({ advanced:[{ focusMode:'manual', focusDistance:cur.focusDistance }] });
+  }catch(e){}
+  focusLocked = true; lockVerify = false; refreshRef = false;
+}
 async function beginFocus(now){
   state = 'focusing'; tFocus = now; bestSharp = -1; drawOverlay();
   focusDur = focusLocked ? QUICK_MS : settings.focusMs;
@@ -1523,6 +1545,7 @@ function unlockFocus(){
   focusLocked = false; lockVerify = false; refreshRef = false;
 }
 function afterShot(ok){
+  if (!settings.midScan) return; // mise au point faite une fois pour toutes au démarrage
   if (ok && settings.lockFocus){
     if (!focusLocked) lockFocus(bestSharp);
   }
@@ -1819,7 +1842,7 @@ bindCheck('cLid', 'requireLid', () => {
   if (mode === 'calib') drawOverlay();
   else if (mode === 'auto') enterAuto();
   else if (mode === 'run' && state === 'empty') setStatus('wait', T('ready'), placeMsg, runActions());
-}); bindCheck('cSharp', 'sharpCheck'); bindCheck('cLock', 'lockFocus', () => { if (!settings.lockFocus) unlockFocus(); }); bindCheck('cSound', 'sound');
+}); bindCheck('cSharp', 'sharpCheck'); bindCheck('cMidScan', 'midScan', () => { if (mode === 'run') startRun(true); }); // change de mode : mise au point et fond repris bindCheck('cSound', 'sound');
 bindCheck('cMeters', 'meters', () => $('meters').classList.toggle('hidden', !settings.meters));
 $('meters').classList.toggle('hidden', !settings.meters);
 $('tOk').addEventListener('click', () => { initAudio(); const s = settings.sound; settings.sound = true; sounds.ok(); settings.sound = s; });

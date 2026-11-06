@@ -73,6 +73,10 @@ input[type=text]:focus{outline:none;background:#fff}
 .empty .btn.primary{background:var(--dish);color:var(--ink)}
 .zoomhint{position:absolute;left:.6rem;bottom:.5rem;max-width:44%;color:#ddd;font-size:.75rem;pointer-events:none;text-shadow:0 1px 2px #000}
 .zoombar{position:absolute;right:.6rem;top:.6rem;display:flex;gap:.4rem;padding:0 var(--b) var(--b) 0}
+/* mode 2 boîtes : choix 1/2 boîtes et réglage des cercles, en haut à gauche de l'image */
+.platebar{position:absolute;left:.6rem;top:.6rem;display:flex;gap:.4rem;padding:0 var(--b) var(--b) 0;z-index:2}
+.platebar .btn[aria-pressed="true"]{background:var(--ink);color:var(--paper)}
+.screen.adjusting{cursor:move}
 .nav{display:flex;align-items:center;gap:.8rem;padding:0 var(--b) var(--b) 0}
 .nav .file{flex:1;min-width:0;text-align:center;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .nav .file b{display:block;font-size:1.05rem;overflow:hidden;text-overflow:ellipsis}
@@ -80,7 +84,8 @@ input[type=text]:focus{outline:none;background:#fff}
 .nav .btn{min-width:9rem}
 
 /* ---------- Panneau de droite : compteur, nom, tableau ---------- */
-.side{display:flex;flex-direction:column;gap:.7rem;min-height:0;padding:.7rem 1rem .8rem .3rem}
+.side{display:flex;flex-direction:column;gap:.7rem;min-height:0;padding:.7rem 1rem .8rem .3rem;overflow-y:auto} /* défile si tout ne tient pas (mode 2 boîtes) */
+.side > .card{flex:none}
 .card{background:var(--paper);border:var(--b) solid var(--ink);box-shadow:var(--b) var(--b) 0 var(--ink);padding:.6rem .7rem}
 .counter{display:flex;align-items:center;gap:.6rem}
 .counter .num{flex:1;text-align:center;line-height:1}
@@ -117,9 +122,13 @@ input[type=text]:focus{outline:none;background:#fff}
 .naming .chip .x{padding:.05rem .3rem}
 .naming .chip .tick{width:13px;height:13px}
 .naming .chips.scope{margin-top:.35rem}
+.naming .chips.plates{margin-bottom:.45rem}
+.naming .chips.plates .chip{font-size:.95rem}
+.naming .final .pl{display:block}
+.naming .final .pl.off{font-weight:400;color:var(--muted)}
 .naming .final{margin-top:.2rem;padding:.2rem .45rem;font-size:.95rem;min-height:calc(1.35em + .4rem + 4px)}
 /* tableau toujours visible, il prend la place qui reste */
-.table{flex:1;min-height:9rem;display:flex;flex-direction:column;padding:0}
+.table{flex:1 0 16rem;min-height:16rem;display:flex;flex-direction:column;padding:0}
 .table .head{display:flex;justify-content:space-between;align-items:flex-end;gap:.5rem;padding:.45rem .6rem 0;border-bottom:var(--b) solid var(--ink)}
 .table .head .saved{align-self:center;padding-bottom:.2rem}
 .table .head b{text-transform:uppercase;letter-spacing:.06em;font-size:1.3rem}
@@ -233,6 +242,11 @@ dialog.pix .row{display:flex;justify-content:flex-end;margin-top:1rem;padding:0 
         </div>
         <p class="muted" id="browserNote"></p>
       </div>
+      <div class="platebar" id="platebar" hidden>
+        <button class="btn small" id="btnOne" type="button" data-i18n="onePlate"></button>
+        <button class="btn small" id="btnTwo" type="button" data-i18n="twoPlates"></button>
+        <button class="btn small" id="btnAdjust" type="button" data-i18n="adjust" hidden></button>
+      </div>
       <div class="zoombar" id="zoombar" hidden>
         <button class="btn small" id="zOut" type="button" aria-label="−">−</button>
         <button class="btn small" id="zFit" type="button" data-i18n="fit"></button>
@@ -256,6 +270,7 @@ dialog.pix .row{display:flex;justify-content:flex-end;margin-top:1rem;padding:0 
     <button class="btn" id="btnRedo" type="button" data-i18n-aria="redo" disabled>↷</button>
   </div>
   <div class="card naming">
+    <div class="chips plates" id="plateSel" hidden></div>
     <div class="frow"><label class="lbl" for="inPrefix" data-i18n="prefix"></label>
       <div class="fctl"><input type="text" id="inPrefix" autocomplete="off" data-i18n-ph="prefixPh"><div class="chips scope" id="prefixScope"></div></div></div>
     <div class="frow stack"><span class="lbl" data-i18n="group"></span>
@@ -332,7 +347,7 @@ dialog.pix .row{display:flex;justify-content:flex-end;margin-top:1rem;padding:0 
 (() => {
 'use strict';
 const $ = id => document.getElementById(id);
-const VERSION = 'v20 · 05/11';
+const VERSION = 'v21 · 06/11';
 const SAVE_FILE = 'petri-comptage.json';
 const IMG_RE = /\.(jpe?g|png|webp|gif|bmp|avif)$/i;
 const canWriteFolder = typeof window.showDirectoryPicker === 'function'; // Chrome, Edge : lecture et écriture dans le dossier
@@ -352,6 +367,8 @@ const I18N = {
     undo:'Undo', redo:'Redo', prefix:'Prefix', prefixPh:'e.g. 2026-11-04_E.coli', scopeOne:'This one', scopeAll:'All',
     prefixAllQ: p => p.v ? 'Apply the prefix “' + p.v + '” to all images?' : 'Remove the prefix from all images?',
     prefixAllD: p => 'All ' + p.n + ' images of the folder will get this prefix, including those not opened yet. The ↶ ↷ arrows on this image can undo it.', apply:'Apply',
+    onePlate:'1 plate', twoPlates:'2 plates', adjust:'Adjust circles', adjustDone:'Done', plateN: p => 'Plate ' + p.n,
+    adjustHint:'Drag a circle to move it, drag its edge to resize it. Click Done to count again.',
     group:'Group', groupPh:'New group…', dilution:'Dilution', dilPh:'e.g. 1:10', newDil:'New dilution', add:'Add', name:'Name', namePh:'e.g. 10-3', results:'Results', colName:'Name', graph:'Graph', noGroup:'No group', copyGraph:'Copy the graph', graphCopied:'Graph copied to the clipboard.', copyFail:'Could not copy the graph.',
     graphEmpty:'Tick a group for the counted images to see the mean count per group.',
     graphTip: p => p.g + ': mean ' + p.m + ' CFU (SD ' + p.sd + ', n = ' + p.n + ')',
@@ -417,7 +434,7 @@ $('btnWipe').addEventListener('click', async () => {
   try{ localStorage.removeItem(localKey()); }catch(e){}
   if (dir){ try{ await dir.removeEntry(SAVE_FILE); }catch(e){} }
   const keepIdx = Math.max(0, idx);
-  data = blank(); lastPrefix = lastGroup = lastDilution = ''; for (const k in hist) delete hist[k];
+  data = blank(); resetCarry(); plate = 0; adjusting = false; for (const k in hist) delete hist[k];
   idx = -1; $('setDlg').close(); toast(t('wiped'));
   if (files.length) await show(keepIdx);
 });
@@ -454,7 +471,32 @@ function toast(msg){ const e = $('toast'); e.textContent = msg; e.classList.add(
    x et y sont en fractions de la largeur et de la hauteur de l'image. */
 let dir = null, folder = '', files = [], idx = -1;
 let data = blank();
-let lastPrefix = '', lastGroup = '', lastDilution = '';  // reportés sur chaque nouvelle image tant qu'on ne les change pas
+// valeurs reportées sur chaque nouvelle image tant qu'on ne les change pas : C[0] pour la boîte (ou la boîte 1), C[1] pour la boîte 2
+const C = [{ prefix:'', group:'', dilution:'' }, { prefix:'', group:'', dilution:'' }];
+const resetCarry = () => { C[0] = { prefix:'', group:'', dilution:'' }; C[1] = { prefix:'', group:'', dilution:'' }; };
+/* ---------- Mode 2 boîtes ----------
+   Deux cercles (communs à tout le dossier, x/y en fractions de l'image, r en fraction de la largeur) délimitent les boîtes.
+   Boîte 1 = les champs de l'image (prefix, group, dilution, name) ; boîte 2 = image.p2. Chaque repère appartient à la boîte
+   dont le cercle le contient (sinon la plus proche) : déplacer un cercle réattribue les repères. */
+const dbl = () => !!data.double;
+let plate = 0, adjusting = false;
+const circles = () => data.circles || (data.circles = [{ x:.27, y:.5, r:.21 }, { x:.73, y:.5, r:.21 }]);
+function p2Of(r){ if (!r.p2) r.p2 = { prefix:r.prefix || '', group:'', dilution:'', name:'' }; return r.p2; }
+const fieldsOf = (r, i) => i ? p2Of(r) : r;
+const cur = () => dbl() ? plate : 0;
+const tgt = () => { const r = rec(); return r && fieldsOf(r, cur()); };
+function plateOf(m, ar){ const d = circles().map(c => Math.hypot(m[0] - c.x, (m[1] - c.y) * ar) / c.r); return d[0] <= 1 ? 0 : d[1] <= 1 ? 1 : (d[0] <= d[1] ? 0 : 1); }
+const countOf = (r, i) => !dbl() || i == null ? r.marks.length : r.marks.filter(m => plateOf(m, r.ar || 9/16) === i).length;
+// une entrée par boîte comptée : { f, r, plate, fields, count } (une par image hors mode 2 boîtes)
+function samples(){
+  const out = [];
+  files.forEach(f => { const r = data.images[f.name]; if (!r || r.pending) return;
+    if (dbl()) [0, 1].forEach(i => out.push({ f, r, plate:i, fields:fieldsOf(r, i), count:countOf(r, i) }));
+    else out.push({ f, r, plate:null, fields:r, count:r.marks.length }); });
+  return out;
+}
+const sampleName = sm => finalName(sm.fields) || stem(sm.f.name) + (sm.plate != null ? ' (' + (sm.plate + 1) + ')' : '');
+const counted = sm => sm.count > 0 || !!(sm.fields.name || '').trim(); // images comptées ou nommées (statistiques)
 const hist = {};                      // annuler / rétablir, par image : { undo:[…], redo:[…] }
 function blank(){ return { version:1, prefix:'', group:'', groups:[], dilution:'', dilutions:[], images:{} }; }
 const localKey = () => 'petri.count.' + folder;
@@ -507,7 +549,8 @@ async function load(name, list, saved){
     if (!(await ask(t('restoreTitle'), t('restoreText', { s:SAVE_FILE, n }), t('restoreYes'), t('restoreNo')))){ try{ localStorage.removeItem(localKey()); }catch(e){} local = null; }
   }
   data = Object.assign(blank(), saved && saved.images ? saved : local && local.images ? local : {});
-  lastPrefix = data.prefix || ''; lastGroup = data.group || ''; lastDilution = data.dilution || '';
+  C[0] = { prefix:data.prefix || '', group:data.group || '', dilution:data.dilution || '' };
+  C[1] = Object.assign({ prefix:C[0].prefix, group:'', dilution:'' }, data.carry2 || {}); plate = 0; adjusting = false;
   for (const k in hist) delete hist[k];
   $('folderName').hidden = false; $('folderName').title = t('folderTip'); $('folderName').innerHTML = FOLDER_SVG; const fn = document.createElement('span'); fn.textContent = folder; $('folderName').appendChild(fn);
   $('btnCsv').disabled = !files.length;
@@ -538,7 +581,7 @@ function scheduleSave(){ clearTimeout(saveTimer); saveTimer = setTimeout(saveNow
 function saveNow(){
   clearTimeout(saveTimer);
   if (!folder) return saving;
-  data.prefix = lastPrefix; data.group = lastGroup; data.dilution = lastDilution;
+  data.prefix = C[0].prefix; data.group = C[0].group; data.dilution = C[0].dilution; data.carry2 = C[1];
   const json = JSON.stringify(data, null, 1);
   saving = saving.then(async () => {
     const okLocal = store.set(localKey(), data);
@@ -554,24 +597,26 @@ window.addEventListener('beforeunload', () => { store.set(localKey(), data); });
 
 /* ---------- Image courante ---------- */
 let url = null, natW = 1, natH = 1;
-function showEmpty(on){ $('empty').hidden = !on; $('pan').hidden = on; $('zoombar').hidden = on; $('zoomhint').hidden = on; }
+function showEmpty(on){ $('empty').hidden = !on; $('pan').hidden = on; $('zoombar').hidden = on; $('zoomhint').hidden = on; $('platebar').hidden = on; }
 async function show(i){
   if (!files.length) return;
   if (idx >= 0) await saveNow(); // tout est enregistré avant de quitter l'image
   idx = Math.max(0, Math.min(files.length - 1, i));
   const f = files[idx];
   // nouvelle image : préfixe et groupe repris, nom vidé
-  if (!data.images[f.name]) data.images[f.name] = { prefix:lastPrefix, group:lastGroup, dilution:lastDilution, name:'', marks:[] };
-  else if (data.images[f.name].pending){ const p = data.images[f.name]; p.group = lastGroup; p.dilution = lastDilution; delete p.pending; } // ouverte pour la 1re fois
+  // boîte 2 : sans préfixe propre, elle reprend celui de la boîte 1
+  const p2New = () => Object.assign({}, C[1], { prefix:C[1].prefix || C[0].prefix, name:'' });
+  if (!data.images[f.name]) data.images[f.name] = { prefix:C[0].prefix, group:C[0].group, dilution:C[0].dilution, name:'', marks:[], p2:p2New() };
+  else if (data.images[f.name].pending){ const p = data.images[f.name]; p.group = C[0].group; p.dilution = C[0].dilution; p.p2 = Object.assign(p2New(), { prefix:p.prefix }); delete p.pending; } // ouverte pour la 1re fois
   const r = rec();
-  $('inPrefix').value = r.prefix; $('inName').value = r.name; // revoir une image ne change pas ce qui est reporté sur les suivantes
+  syncInputs(); // revoir une image ne change pas ce qui est reporté sur les suivantes
   const file = f.file || await f.handle.getFile();
   if (url) URL.revokeObjectURL(url);
   url = URL.createObjectURL(file);
   const img = $('img');
   await new Promise(res => { img.onload = res; img.onerror = res; img.src = url; });
   const sameSize = natW === img.naturalWidth && natH === img.naturalHeight;
-  natW = img.naturalWidth || 1; natH = img.naturalHeight || 1;
+  natW = img.naturalWidth || 1; natH = img.naturalHeight || 1; r.ar = natH / natW; // proportions, pour attribuer les repères aux boîtes
   $('marks').setAttribute('viewBox', '0 0 ' + natW + ' ' + natH);
   showEmpty(false);
   if (S.keepZoom && sameSize && zoom > 1) applyView(); else fit(); // même zone sur l'image suivante
@@ -615,11 +660,25 @@ let drag = null;
 screenEl.addEventListener('pointerdown', e => {
   if (idx < 0 || e.target.closest('.zoombar, .empty')) return;
   if (e.button !== 0 && e.button !== 2) return;
-  drag = { id:e.pointerId, x:e.clientX, y:e.clientY, tx, ty, moved:false, pan: e.button === 2 || e.pointerType === 'touch', count: e.button === 0 };
+  if (adjusting && e.button === 0){ // réglage des cercles : bord = taille, intérieur = position
+    const b = screenEl.getBoundingClientRect(), s = base*zoom, px = (e.clientX - b.left - tx) / s, py = (e.clientY - b.top - ty) / s;
+    let hit = null;
+    circles().forEach((c, i) => { const d = Math.hypot(px - c.x*natW, py - c.y*natH), rr = c.r*natW;
+      if (Math.abs(d - rr) < 14 / s) hit = { i, kind:'size' }; else if (!hit && d < rr) hit = { i, kind:'move', ox:px - c.x*natW, oy:py - c.y*natH }; });
+    if (hit){ drag = Object.assign({ id:e.pointerId, circle:true }, hit); plate = hit.i; screenEl.setPointerCapture(e.pointerId); }
+    return;
+  }
+  drag = { id:e.pointerId, x:e.clientX, y:e.clientY, tx, ty, moved:false, pan: e.button === 2 || e.pointerType === 'touch', count: e.button === 0 && !adjusting };
   screenEl.setPointerCapture(e.pointerId);
 });
 screenEl.addEventListener('pointermove', e => {
   if (!drag || e.pointerId !== drag.id) return;
+  if (drag.circle){
+    const b = screenEl.getBoundingClientRect(), s = base*zoom, px = (e.clientX - b.left - tx) / s, py = (e.clientY - b.top - ty) / s, c = circles()[drag.i];
+    if (drag.kind === 'move'){ c.x = Math.min(1, Math.max(0, (px - drag.ox) / natW)); c.y = Math.min(1, Math.max(0, (py - drag.oy) / natH)); }
+    else c.r = Math.min(.6, Math.max(.03, Math.hypot(px - c.x*natW, py - c.y*natH) / natW));
+    renderMarks(); return;
+  }
   const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
   if (!drag.moved && Math.hypot(dx, dy) > 6){ drag.moved = true; if (drag.pan) screenEl.classList.add('panning'); }
   if (drag.moved && drag.pan){ tx = drag.tx + dx; ty = drag.ty + dy; applyView(); }
@@ -627,6 +686,7 @@ screenEl.addEventListener('pointermove', e => {
 const endDrag = e => {
   if (!drag || e.pointerId !== drag.id) return;
   const d = drag; drag = null; screenEl.classList.remove('panning');
+  if (d.circle){ changed(); return; } // cercles réglés : comptes par boîte mis à jour et enregistrés
   if (!d.moved && d.count && e.type === 'pointerup') clickAt(e.clientX, e.clientY);
 };
 screenEl.addEventListener('pointerup', endDrag); screenEl.addEventListener('pointercancel', endDrag);
@@ -638,6 +698,7 @@ function clickAt(cx, cy){
   const b = screenEl.getBoundingClientRect(), s = base*zoom;
   const x = (cx - b.left - tx) / s, y = (cy - b.top - ty) / s; // pixels de l'image
   if (x < 0 || y < 0 || x > natW || y > natH) return;
+  if (dbl()){ const pi = plateOf([x / natW, y / natH], natH / natW); if (pi !== plate){ plate = pi; syncInputs(); } } // compter dans un cercle sélectionne sa boîte
   const r = rec(), tol = Math.max(12, S.size + 3) / s; // un clic sur un repère (ou tout près) le retire
   let hit = -1, best = Infinity;
   r.marks.forEach((m, i) => { const d = Math.hypot(m[0]*natW - x, m[1]*natH - y); if (d < tol && d < best){ best = d; hit = i; } });
@@ -652,7 +713,7 @@ function doOp(a, reverse){
       if (reverse){ if (data.images[k] && data.images[k].pending) delete data.images[k]; }
       else if (!data.images[k]) data.images[k] = { prefix:a.value, group:'', dilution:'', name:'', marks:[], pending:true };
     });
-    const r = rec(); if (r){ lastPrefix = r.prefix; $('inPrefix').value = r.prefix; }
+    const r = rec(); if (r){ C[0].prefix = r.prefix; syncInputs(); }
     return;
   }
   const r = rec(), add = (a.op === 'add') !== !!reverse;
@@ -666,8 +727,14 @@ $('btnRedo').addEventListener('click', redo);
 function changed(){ renderAll(); scheduleSave(); }
 
 /* ---------- Nom de la condition ---------- */
-$('inPrefix').addEventListener('input', e => { const r = rec(); if (!r) return; r.prefix = lastPrefix = e.target.value; changed(); });
-$('inName').addEventListener('input', e => { const r = rec(); if (!r) return; r.name = e.target.value; changed(); });
+function syncInputs(){ const t0 = tgt(); $('inPrefix').value = t0 ? t0.prefix || '' : ''; $('inName').value = t0 ? t0.name || '' : ''; }
+$('inPrefix').addEventListener('input', e => {
+  const t0 = tgt(); if (!t0) return;
+  // boîte 1 : la boîte 2 suit tant qu'elle avait le même préfixe (préfixe commun de la manip)
+  if (dbl() && plate === 0){ const r = rec(), q = p2Of(r); if (q.prefix === (r.prefix || '')) q.prefix = e.target.value; if (C[1].prefix === C[0].prefix) C[1].prefix = e.target.value; }
+  t0.prefix = C[cur()].prefix = e.target.value; changed();
+});
+$('inName').addEventListener('input', e => { const t0 = tgt(); if (!t0) return; t0.name = e.target.value; changed(); });
 // Portée du préfixe : la case cochée reflète l'état réel. « Toutes les images » est cochée quand toutes les images
 // ouvertes partagent ce préfixe ; taper un autre préfixe ne change que l'image en cours (et les suivantes, nouvelles).
 // « All » coché quand toutes les images ouvertes ont ce préfixe (même s'il n'y en a qu'une : les suivantes le recevront) ;
@@ -675,6 +742,7 @@ $('inName').addEventListener('input', e => { const r = rec(); if (!r) return; r.
 const allSamePrefix = () => { const recs = Object.values(data.images), r = rec(); return !!r && !!(r.prefix || '').trim() && recs.every(x => (x.prefix || '') === r.prefix); };
 function renderScope(){
   const box = $('prefixScope'), all = allSamePrefix(); box.innerHTML = '';
+  box.hidden = dbl(); if (dbl()) return; // en mode 2 boîtes, chaque boîte a son préfixe (reporté sur les images suivantes)
   [['one', t('scopeOne'), !all], ['all', t('scopeAll'), all]].forEach(([k, label, on]) => {
     const c = document.createElement('span'); c.className = 'chip'; c.setAttribute('aria-pressed', String(on));
     const b = document.createElement('button'); b.type = 'button'; b.disabled = idx < 0;
@@ -696,15 +764,15 @@ const LISTS = {
   group:    { list:'groups',    box:'chips',    add:'groupAdd', input:'inGroup', btn:'btnAddGroup', newKey:'newGroup' },
   dilution: { list:'dilutions', box:'dilChips', add:'dilAdd',   input:'inDil',   btn:'btnAddDil',   newKey:'newDil' }
 };
-const getLast = k => k === 'group' ? lastGroup : lastDilution;
-const setLast = (k, v) => { if (k === 'group') lastGroup = v; else lastDilution = v; };
+const getLast = k => C[cur()][k];
+const setLast = (k, v) => { C[cur()][k] = v; };
 function showAdd(k, on){ const L = LISTS[k]; $(L.add).hidden = !on; if (on) $(L.input).focus(); else $(L.input).value = ''; }
 function addItem(k){
   const L = LISTS[k], v = $(L.input).value.trim(); if (!v) return;
   if (!data[L.list]) data[L.list] = [];
   if (!data[L.list].includes(v)) data[L.list].push(v);
   showAdd(k, false);
-  const r = rec(); if (r){ r[k] = v; setLast(k, v); }
+  const r = tgt(); if (r){ r[k] = v; setLast(k, v); }
   changed();
 }
 Object.keys(LISTS).forEach(k => {
@@ -717,14 +785,14 @@ Object.keys(LISTS).forEach(k => {
   $(L.input).addEventListener('blur', () => setTimeout(() => { if (!$(L.input).value.trim() && document.activeElement !== $(L.btn)) showAdd(k, false); }, 150));
 });
 function renderList(k){
-  const L = LISTS[k], box = $(L.box), r = rec(); box.innerHTML = '';
+  const L = LISTS[k], box = $(L.box), r = tgt(); box.innerHTML = '';
   (data[L.list] || []).forEach(g => {
     const c = document.createElement('span'); c.className = 'chip'; c.setAttribute('aria-pressed', String(!!r && r[k] === g));
     const b = document.createElement('button'); b.type = 'button';
     const tick = document.createElement('span'); tick.className = 'tick'; tick.setAttribute('aria-hidden', 'true'); b.append(tick, document.createTextNode(g));
-    b.addEventListener('click', () => { const r2 = rec(); if (!r2) return; r2[k] = r2[k] === g ? '' : g; setLast(k, r2[k]); changed(); }); // re-cliquer : aucun
+    b.addEventListener('click', () => { const r2 = tgt(); if (!r2) return; r2[k] = r2[k] === g ? '' : g; setLast(k, r2[k]); changed(); }); // re-cliquer : aucun
     const x = document.createElement('button'); x.type = 'button'; x.className = 'x'; x.textContent = '×'; x.setAttribute('aria-label', '× ' + g);
-    x.addEventListener('click', () => { data[L.list] = data[L.list].filter(v => v !== g); if (getLast(k) === g) setLast(k, ''); changed(); }); // les images déjà nommées gardent leur valeur
+    x.addEventListener('click', () => { data[L.list] = data[L.list].filter(v => v !== g); C.forEach(c => { if (c[k] === g) c[k] = ''; }); changed(); }); // les images déjà nommées gardent leur valeur
     c.append(b, x); box.appendChild(c);
   });
   // « + » en fin de liste : fait apparaître le champ pour une nouvelle valeur
@@ -735,11 +803,45 @@ function renderList(k){
 }
 function renderChips(){ renderList('group'); renderList('dilution'); }
 
+/* ---------- Mode 2 boîtes : interface ---------- */
+function circlesSVG(s){
+  if (!dbl()) return '';
+  const r = rec();
+  return circles().map((c, i) => {
+    const cx = c.x*natW, cy = c.y*natH, rr = c.r*natW, on = i === plate, sw = (adjusting ? 4 : on ? 3 : 2) / s;
+    const nm = r ? finalName(fieldsOf(r, i)) : '', fsN = 34 / s, fsT = 14 / s, lx = cx - rr*.72, ly = cy - rr*.72;
+    return '<circle cx="' + cx + '" cy="' + cy + '" r="' + rr + '" fill="none" stroke="#1A1A1A" stroke-width="' + (sw + 3/s) + '" opacity=".55"/>' +
+      '<circle cx="' + cx + '" cy="' + cy + '" r="' + rr + '" fill="none" stroke="' + (on ? '#F8F2E4' : '#CFC3A8') + '" stroke-width="' + sw + '" stroke-dasharray="' + (12/s) + ' ' + (8/s) + '"/>' +
+      '<text x="' + lx + '" y="' + ly + '" text-anchor="middle" font-size="' + fsN + '" font-weight="700" font-family="ByteBounce, Pixelify Sans, monospace" fill="#F8F2E4" stroke="#1A1A1A" stroke-width="' + (4/s) + '" paint-order="stroke">' + (i + 1) + '</text>' +
+      (nm ? '<text x="' + lx + '" y="' + (ly + fsT*1.4) + '" text-anchor="middle" font-size="' + fsT + '" font-family="ByteBounce, Pixelify Sans, monospace" fill="#F8F2E4" stroke="#1A1A1A" stroke-width="' + (3/s) + '" paint-order="stroke">' + esc(nm) + '</text>' : '') +
+      (adjusting ? '<circle cx="' + (cx + rr) + '" cy="' + cy + '" r="' + (8/s) + '" fill="#F2C14E" stroke="#1A1A1A" stroke-width="' + (2.5/s) + '"/>' : '');
+  }).join('');
+}
+function renderPlateUI(){
+  $('btnOne').setAttribute('aria-pressed', String(!dbl())); $('btnTwo').setAttribute('aria-pressed', String(dbl()));
+  $('btnAdjust').hidden = !dbl(); $('btnAdjust').textContent = t(adjusting ? 'adjustDone' : 'adjust');
+  $('btnAdjust').setAttribute('aria-pressed', String(adjusting)); screenEl.classList.toggle('adjusting', adjusting);
+  const sel = $('plateSel'); sel.hidden = !dbl(); sel.innerHTML = '';
+  if (dbl()) [0, 1].forEach(i => {
+    const c = document.createElement('span'); c.className = 'chip'; c.setAttribute('aria-pressed', String(i === plate));
+    const b = document.createElement('button'); b.type = 'button'; b.textContent = t('plateN', { n:i + 1 });
+    b.addEventListener('click', () => { plate = i; syncInputs(); renderAll(); }); c.appendChild(b); sel.appendChild(c);
+  });
+}
+function setDouble(on){
+  data.double = on; plate = 0; adjusting = false;
+  if (on){ circles(); if (!C[1].prefix) C[1].prefix = C[0].prefix; const r = rec(); if (r){ const q = p2Of(r); if (!q.prefix) q.prefix = r.prefix || ''; } } // la boîte 2 reprend le préfixe
+  syncInputs(); changed();
+}
+$('btnOne').addEventListener('click', () => setDouble(false));
+$('btnTwo').addEventListener('click', () => setDouble(true));
+$('btnAdjust').addEventListener('click', () => { adjusting = !adjusting; if (adjusting) toast(t('adjustHint')); renderAll(); if (!adjusting) scheduleSave(); });
+
 /* ---------- Affichage ---------- */
 function renderMarks(){
   const r = rec(), svg = $('marks'); if (!r){ svg.innerHTML = ''; return; }
   const s = base*zoom, rad = S.size / s, w = 2.5 / s, fs = 18 / s; // taille constante à l'écran, quel que soit le zoom
-  svg.innerHTML = r.marks.map((m, i) => { const x = (m[0]*natW).toFixed(1), y = (m[1]*natH).toFixed(1);
+  svg.innerHTML = circlesSVG(s) + r.marks.map((m, i) => { const x = (m[0]*natW).toFixed(1), y = (m[1]*natH).toFixed(1);
     return '<circle cx="' + x + '" cy="' + y + '" r="' + rad + '" fill="none" stroke="#1A1A1A" stroke-width="' + (w*2.2) + '"/>' +
       '<circle cx="' + x + '" cy="' + y + '" r="' + rad + '" fill="none" stroke="' + S.color + '" stroke-width="' + w + '"/>' +
       (S.num ? '<text x="' + (+x + rad + 2/s) + '" y="' + (+y - rad) + '" font-size="' + fs + '" font-family="Pixelify Sans, monospace" fill="' + S.color + '" stroke="#1A1A1A" stroke-width="' + (1.6/s) + '" paint-order="stroke" font-weight="700">' + (i + 1) + '</text>' : ''); }).join('');
@@ -782,10 +884,7 @@ async function copyGraph(){
 $('btnCopyGraph').addEventListener('click', copyGraph);
 function groupStats(){
   const by = new Map();
-  Object.values(data.images).forEach(r => {
-    if (!r.marks.length && !(r.name || '').trim()) return;
-    const g = r.group || ''; if (!by.has(g)) by.set(g, []); by.get(g).push(r.marks.length);
-  });
+  samples().filter(counted).forEach(sm => { const g = sm.fields.group || ''; if (!by.has(g)) by.set(g, []); by.get(g).push(sm.count); });
   const order = [...data.groups.filter(g => by.has(g)), ...[...by.keys()].filter(g => g && !data.groups.includes(g)), ...(by.has('') ? [''] : [])];
   return order.map(g => { const v = by.get(g), m = v.reduce((a, b) => a + b, 0) / v.length;
     const sd = v.length > 1 ? Math.sqrt(v.reduce((a, b) => a + (b - m)**2, 0) / (v.length - 1)) : 0;
@@ -844,31 +943,38 @@ function renderTable(){
   const tb = $('rows'); if (!tb) return;
   tb.innerHTML = '';
   files.forEach((f, i) => {
-    const r = data.images[f.name], tr = document.createElement('tr'), open = r && !r.pending;
-    tr.className = 'row' + (i === idx ? ' cur' : '');
-    const name = open ? finalName(r) : '', td1 = document.createElement('td'), td2 = document.createElement('td');
-    if (name) td1.textContent = name;
-    else { td1.textContent = r && r.pending && (r.prefix || '').trim() ? r.prefix.trim() + S.sep + stem(f.name) : stem(f.name); td1.className = 'unnamed'; } // pas encore ouverte : en gris
-    td2.className = 'n'; td2.textContent = open ? r.marks.length : '–';
-    tr.append(td1, td2); tr.addEventListener('click', () => show(i)); tb.appendChild(tr);
+    const r = data.images[f.name], open = r && !r.pending;
+    const row = (label, grey, count, pi) => {
+      const tr = document.createElement('tr'), td1 = document.createElement('td'), td2 = document.createElement('td');
+      tr.className = 'row' + (i === idx && (pi == null || pi === cur()) ? ' cur' : '');
+      td1.textContent = label; if (grey) td1.className = 'unnamed'; td2.className = 'n'; td2.textContent = count;
+      tr.append(td1, td2); tr.addEventListener('click', () => { if (pi != null) plate = pi; if (i === idx){ syncInputs(); renderAll(); } else show(i); }); tb.appendChild(tr);
+    };
+    if (!open) row(r && r.pending && (r.prefix || '').trim() ? r.prefix.trim() + S.sep + stem(f.name) : stem(f.name), true, '–', null); // pas encore ouverte : en gris
+    else if (dbl()) [0, 1].forEach(pi => { const fl = fieldsOf(r, pi), n = finalName(fl); row(n || stem(f.name) + ' (' + (pi + 1) + ')', !n, countOf(r, pi), pi); }); // une ligne par boîte
+    else { const n = finalName(r); row(n || stem(f.name), !n, r.marks.length, null); }
   });
 }
 function renderAll(){
   const r = rec();
-  $('count').textContent = r ? r.marks.length : 0;
+  $('count').textContent = !r ? 0 : dbl() ? countOf(r, 0) + ' · ' + countOf(r, 1) : r.marks.length; // mode 2 boîtes : boîte 1 · boîte 2
+  document.querySelector('.counter .num span').textContent = dbl() ? 'CFU (1 · 2)' : 'CFU';
   const h = r ? H() : { undo:[], redo:[] };
   $('btnUndo').disabled = !h.undo.length; $('btnRedo').disabled = !h.redo.length;
-  const fn = finalName(r), fe = $('finalName');
-  fe.textContent = fn || (idx >= 0 ? stem(curName()) : '–'); fe.classList.toggle('fallback', !fn);
-  renderChips(); renderScope(); renderMarks(); renderTable();
+  const fe = $('finalName');
+  if (dbl() && r){ // les deux noms ; celui de la boîte en cours d'édition en gras
+    fe.innerHTML = ''; fe.classList.remove('fallback');
+    [0, 1].forEach(i => { const sp = document.createElement('span'); sp.className = 'pl' + (i === plate ? '' : ' off'); sp.textContent = (i + 1) + ' · ' + (finalName(fieldsOf(r, i)) || '–'); fe.appendChild(sp); });
+  } else { const fn = finalName(r); fe.textContent = fn || (idx >= 0 ? stem(curName()) : '–'); fe.classList.toggle('fallback', !fn); }
+  renderPlateUI(); renderChips(); renderScope(); renderMarks(); renderTable();
   if (tab === 'graph') renderGraph();
 }
 
 /* ---------- Export ---------- */
 function csvText(){
   const sep = S.csvSep, q = v => (v.includes(sep) || /["\n]/.test(v)) ? '"' + v.replace(/"/g, '""') + '"' : v;
-  const lines = [[t('colName'), 'CFU', 'Dilution', 'Image'].join(sep)];
-  files.forEach(f => { const r = data.images[f.name]; if (r && !r.pending) lines.push([q(finalName(r) || stem(f.name)), r.marks.length, q(r.dilution || ''), q(f.name)].join(sep)); });
+  const lines = [[t('colName'), 'CFU', 'Dilution', 'Image'].concat(dbl() ? ['Plate'] : []).join(sep)];
+  samples().forEach(sm => lines.push([q(sampleName(sm)), sm.count, q(sm.fields.dilution || ''), q(sm.f.name)].concat(dbl() ? [sm.plate + 1] : []).join(sep))); // une ligne par boîte
   return '\ufeff' + lines.join('\r\n') + '\r\n'; // BOM : les accents s'affichent correctement dans Excel
 }
 const csvName = () => 'comptage_' + folder.replace(/[^\w.-]+/g, '_') + '.csv';
@@ -905,7 +1011,7 @@ $('csvElse').addEventListener('click', () => exportCsv(false));
 
 /* Rapport PDF, volontairement sobre (Helvetica, noir et blanc) pour être transmis tel quel :
    deux images par page A4, chacune entière avec ses repères (sans numéros), suivie d'un tableau Nom / CFU. */
-async function reportImage(f, r){
+async function reportImage(f, r){ // mode 2 boîtes : les cercles et le nom de chaque boîte sont dessinés sur l'image
   const file = f.file || await f.handle.getFile(), u = URL.createObjectURL(file);
   try{
     const img = new Image(); await new Promise((res, rej) => { img.onload = res; img.onerror = rej; img.src = u; });
@@ -917,6 +1023,13 @@ async function reportImage(f, r){
       x.beginPath(); x.arc(mx*w, my*h, rad, 0, 2*Math.PI); x.lineWidth = lw*2.4; x.strokeStyle = '#000'; x.stroke();
       x.beginPath(); x.arc(mx*w, my*h, rad, 0, 2*Math.PI); x.lineWidth = lw; x.strokeStyle = S.color; x.stroke();
     });
+    if (dbl()) circles().forEach((c, i) => {
+      const cx = c.x*w, cy = c.y*h, rr = c.r*w, fs = Math.round(w*.03), fs2 = Math.round(w*.016), lx = cx - rr*.72, ly = cy - rr*.72;
+      x.setLineDash([w*.012, w*.008]); x.lineWidth = w*.004; x.strokeStyle = '#fff'; x.beginPath(); x.arc(cx, cy, rr, 0, 2*Math.PI); x.stroke(); x.setLineDash([]);
+      x.textAlign = 'center'; x.lineJoin = 'round'; x.font = 'bold ' + fs + 'px Helvetica, Arial, sans-serif';
+      x.lineWidth = fs*.18; x.strokeStyle = '#000'; x.strokeText(String(i + 1), lx, ly); x.fillStyle = '#fff'; x.fillText(String(i + 1), lx, ly);
+      const nm = finalName(fieldsOf(r, i)); if (nm){ x.font = fs2 + 'px Helvetica, Arial, sans-serif'; x.lineWidth = fs2*.25; x.strokeText(nm, lx, ly + fs2*1.5); x.fillText(nm, lx, ly + fs2*1.5); }
+    });
     return { url:c.toDataURL('image/jpeg', .88), w, h };
   } finally { URL.revokeObjectURL(u); }
 }
@@ -924,7 +1037,7 @@ async function reportImage(f, r){
 // statistiques par groupe pour le rapport (mêmes images que l'onglet Graph)
 function groupTable(){
   return groupStats().map(s => {
-    const v = Object.values(data.images).filter(r => (r.marks.length || (r.name || '').trim()) && (r.group || '') === s.g).map(r => r.marks.length).sort((a, b) => a - b);
+    const v = samples().filter(sm => counted(sm) && (sm.fields.group || '') === s.g).map(sm => sm.count).sort((a, b) => a - b);
     const mid = v.length / 2, median = v.length % 2 ? v[Math.floor(mid)] : (v[mid - 1] + v[mid]) / 2;
     return Object.assign({}, s, { median, min:v[0], max:v[v.length - 1] });
   });
@@ -992,24 +1105,23 @@ async function buildReport(exp, desc, withGraph){
     toast(t('pdfBusy', { i:++n, n:items.length }));
     const r = data.images[f.name], im = await reportImage(f, r);
     let iw = CW, ih = CW * im.h / im.w; if (ih > 100){ ih = 100; iw = ih * im.w / im.h; }
-    const blockH = ih + 6 + 16;
+    const blockH = ih + 6 + 7*(dbl() ? 3 : 2) + 2;
     if (y + blockH > PH - 14){ doc.addPage(); header(); y = 26; }
     doc.addImage(im.url, 'JPEG', M + (CW - iw)/2, y, iw, ih);
     y += ih + 4;
     doc.setFont('helvetica', 'normal'); doc.setFontSize(8); doc.setTextColor(110);
     doc.text('Image: ' + f.name, M, y);
-    if ((r.dilution || '').trim()) doc.text('Dilution: ' + r.dilution.trim(), PW - M, y, { align:'right' }); // même style que le nom de l'image, à droite
+    if (!dbl() && (r.dilution || '').trim()) doc.text('Dilution: ' + r.dilution.trim(), PW - M, y, { align:'right' }); // même style que le nom de l'image, à droite
     y += 2;
-    // tableau 2 × 2 : en-têtes, puis le nom et le nombre de colonies
-    const c1 = CW - 35, rh = 7;
+    // tableau : en-têtes, puis une ligne par boîte (nom et nombre de colonies)
+    const c1 = CW - 35, rh = 7, lines = dbl() ? [0, 1].map(i => [(i + 1) + '. ' + (finalName(fieldsOf(r, i)) || stem(f.name) + ' (' + (i + 1) + ')'), countOf(r, i)]) : [[finalName(r) || stem(f.name), r.marks.length]];
     doc.setDrawColor(0); doc.setLineWidth(.25); doc.setFillColor(235, 235, 235);
-    doc.rect(M, y, CW, rh, 'FD'); doc.rect(M, y + rh, CW, rh); doc.line(M + c1, y, M + c1, y + 2*rh);
+    doc.rect(M, y, CW, rh, 'FD'); lines.forEach((_, k) => doc.rect(M, y + rh*(k + 1), CW, rh)); doc.line(M + c1, y, M + c1, y + rh*(lines.length + 1));
     doc.setTextColor(0); doc.setFontSize(10); doc.setFont('helvetica', 'bold');
     doc.text('Name', M + 2, y + 4.8); doc.text('CFU', M + CW - 2, y + 4.8, { align:'right' });
     doc.setFont('helvetica', 'normal');
-    const name = doc.splitTextToSize(finalName(r) || stem(f.name), c1 - 4)[0];
-    doc.text(name, M + 2, y + rh + 4.8); doc.text(String(r.marks.length), M + CW - 2, y + rh + 4.8, { align:'right' });
-    y += 2*rh + 10;
+    lines.forEach(([nm, n], k) => { doc.text(doc.splitTextToSize(nm, c1 - 4)[0], M + 2, y + rh*(k + 1) + 4.8); doc.text(String(n), M + CW - 2, y + rh*(k + 1) + 4.8, { align:'right' }); });
+    y += rh*(lines.length + 1) + 10;
   }
   if (withGraph) summaryPage(doc, header, { PW, PH, M, CW });
   const pages = doc.getNumberOfPages();
