@@ -372,7 +372,7 @@ dialog.pix .row{display:flex;justify-content:flex-end;margin-top:1rem;padding:0 
 (() => {
 'use strict';
 const $ = id => document.getElementById(id);
-const VERSION = 'v24 · 11/11';
+const VERSION = 'v25 · 11/11';
 const SAVE_FILE = 'petri-comptage.json';
 const IMG_RE = /\.(jpe?g|png|webp|gif|bmp|avif)$/i;
 const canWriteFolder = typeof window.showDirectoryPicker === 'function'; // Chrome, Edge : lecture et écriture dans le dossier
@@ -399,7 +399,7 @@ const I18N = {
     noteColon:'1:X  (1:10, 1:100…)', notePow:'10^-X  (10^-1, 10^-2…)', notePct:'Percent  (10 %, 1 %…)', noteDec:'Decimal  (0.1, 0.01…)',
     stCounted:'Counted', stZero:'0 growth', stNC:'NC', stIgnored:'Ignore',
     dilAllQ: p => 'Apply dilution ' + (p.d || '(none)') + ' and volume ' + (p.v || '–') + ' µL to all plates?',
-    dilAllD: p => 'All ' + p.n + ' images of the folder (every plate) will get these values. The ↶ ↷ arrows on this image can undo it.',
+    dilAllD: p => 'All ' + p.n + ' images of the folder (every plate) will get these values, replacing those already set; images not opened yet get them too. The ↶ ↷ arrows on this image can undo it.',
     unitC:'CFU/sample', add:'Add', name:'Name', namePh:'e.g. 10-3', results:'Results', colName:'Name', graph:'Graph', noGroup:'No group', copyGraph:'Copy the graph', graphCopied:'Graph copied to the clipboard.', copyFail:'Could not copy the graph.',
     graphEmpty:'Tick a group, a dilution and a volume for the counted plates to see the mean CFU/sample per group.',
     graphTip: p => p.g + ': mean ' + p.m + ' CFU/sample (SD ' + p.sd + ', ' + p.n + ' sample' + (p.n > 1 ? 's' : '') + ')',
@@ -658,10 +658,11 @@ async function show(i){
   // boîte 2 : sans préfixe propre, elle reprend celui de la boîte 1
   const p2New = () => Object.assign({}, C[1], { prefix:C[1].prefix || C[0].prefix, name:'' });
   if (!data.images[f.name]) data.images[f.name] = { prefix:C[0].prefix, group:C[0].group, dilution:C[0].dilution, vol:C[0].vol, name:'', marks:[], p2:p2New() };
-  else if (data.images[f.name].pending){ // ouverte pour la 1re fois : les valeurs déjà appliquées (« All ») sont gardées, le reste vient du report
+  else if (data.images[f.name].pending){ // ouverte pour la 1re fois : le préfixe appliqué (« All ») est gardé, le reste vient du report
     const p = data.images[f.name];
-    ['prefix', 'group', 'dilution', 'vol'].forEach(k => { if (p[k] === undefined) p[k] = C[0][k]; });
-    const q = p2New(); p.p2 = Object.assign(q, p.p2 || {}); if (p.p2.prefix === undefined || p.p2.prefix === '') p.p2.prefix = q.prefix || p.prefix;
+    ['prefix', 'group'].forEach(k => { if (p[k] === undefined) p[k] = C[0][k]; });
+    p.dilution = C[0].dilution; p.vol = C[0].vol; // toujours le report (les anciennes versions figeaient ici les valeurs d'« Apply to all plates »)
+    const q = p2New(); p.p2 = Object.assign(q, p.p2 || {}, { dilution:q.dilution, vol:q.vol }); if (p.p2.prefix === undefined || p.p2.prefix === '') p.p2.prefix = q.prefix || p.prefix;
     delete p.pending;
   }
   const r = rec();
@@ -766,11 +767,8 @@ function doOp(a, reverse){
     for (const k in a.before){ const r = data.images[k], b = a.before[k]; if (!r) continue;
       if (reverse){ r.dilution = b.d; r.vol = b.v; if (r.p2 && b.p2){ r.p2.dilution = b.p2.d; r.p2.vol = b.p2.v; } }
       else { r.dilution = a.d; r.vol = a.v; p2Of(r).dilution = a.d; p2Of(r).vol = a.v; } }
-    (a.created || []).forEach(k => {
-      if (reverse){ if (data.images[k] && data.images[k].pending) delete data.images[k]; }
-      else if (!data.images[k]) data.images[k] = { dilution:a.d, vol:a.v, name:'', marks:[], p2:{ dilution:a.d, vol:a.v }, pending:true };
-    });
-    if (!reverse){ C.forEach(c => { c.dilution = a.d; c.vol = a.v; }); } // et pour les prochaines images
+    // images pas encore ouvertes : elles prendront les valeurs reportées à leur ouverture (un volume changé ensuite est donc bien reporté)
+    C.forEach((c, i) => { const b = reverse ? (a.carry || [])[i] : { dilution:a.d, vol:a.v }; if (b){ c.dilution = b.dilution; c.vol = b.vol; } });
     renderDil(); return;
   }
   if (a.op === 'prefixAll'){
@@ -920,9 +918,9 @@ $('btnDilAll').addEventListener('click', async () => {
   const t0 = tgt(); if (!t0) return;
   const d = t0.dilution || '', v = t0.vol || '';
   if (!(await ask(t('dilAllQ', { d, v }), t('dilAllD', { n:files.length }), t('apply'), t('cancel')))) return;
-  const before = {}, created = files.filter(f => !data.images[f.name]).map(f => f.name);
-  for (const k in data.images){ const r = data.images[k]; before[k] = { d:r.dilution, v:r.vol, p2:r.p2 ? { d:r.p2.dilution, v:r.p2.vol } : null }; }
-  apply({ op:'dilAll', d, v, before, created });
+  const before = {}, carry = C.map(c => ({ dilution:c.dilution, vol:c.vol }));
+  for (const k in data.images){ const r = data.images[k]; if (r.pending) continue; before[k] = { d:r.dilution, v:r.vol, p2:r.p2 ? { d:r.p2.dilution, v:r.p2.vol } : null }; }
+  apply({ op:'dilAll', d, v, before, carry });
 });
 const STATUS = [['', 'stCounted'], ['zero', 'stZero'], ['nc', 'stNC'], ['ignored', 'stIgnored']];
 function renderStatus(){
