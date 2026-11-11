@@ -84,8 +84,11 @@ input[type=text]:focus{outline:none;background:#fff}
 .nav .btn{min-width:9rem}
 
 /* ---------- Panneau de droite : compteur, nom, tableau ---------- */
-.side{display:flex;flex-direction:column;gap:.7rem;min-height:0;padding:.7rem 1rem .8rem .3rem;overflow-y:auto;overflow-x:hidden} /* défile si tout ne tient pas (mode 2 boîtes) */
+.side{display:flex;flex-direction:column;gap:.7rem;min-height:0;padding:.7rem 1rem .8rem .3rem;overflow:hidden}
 .side > .card{flex:none}
+/* le panneau ne défile pas : la liste défile dans son cadre ; si la place manque (mode 2 boîtes), la carte du nom défile aussi */
+.side > .naming{flex:0 1 auto;min-height:9rem;overflow-y:auto}
+.side > .table{flex:1 0 13rem}
 .card{background:var(--paper);border:var(--b) solid var(--ink);box-shadow:var(--b) var(--b) 0 var(--ink);padding:.6rem .7rem}
 .counter{display:flex;align-items:center;gap:.6rem}
 .counter .num{flex:1;text-align:center;line-height:1}
@@ -131,11 +134,14 @@ input[type=text]:focus{outline:none;background:#fff}
 .naming .unit .pre,.naming .unit .suf{color:var(--muted);font-size:.95rem;white-space:nowrap}
 .naming .unit .btn{flex:none;margin-left:auto}
 #dilNotes .choice{margin:.25rem 0}
+.naming .chips.dils{margin-top:.35rem}
+.naming .chips.dils:empty{display:none}
+.naming .chips.dils button{padding:.05rem .45rem}
 tr.ign td{color:#B5AC98;text-decoration:line-through}
 tr.cur.ign td{color:#8C8370}
 .naming .final{margin-top:.2rem;padding:.2rem .45rem;font-size:.95rem;min-height:calc(1.35em + .4rem + 4px)}
 /* tableau toujours visible, il prend la place qui reste */
-.table{flex:1 0 16rem;min-height:16rem;display:flex;flex-direction:column;padding:0}
+.table{flex:1 0 13rem;min-height:13rem;display:flex;flex-direction:column;padding:0}
 .table .head{display:flex;justify-content:space-between;align-items:flex-end;gap:.5rem;padding:.45rem .6rem 0;border-bottom:var(--b) solid var(--ink)}
 .table .head .saved{align-self:center;padding-bottom:.2rem}
 .table .head b{text-transform:uppercase;letter-spacing:.06em;font-size:1.3rem}
@@ -160,7 +166,7 @@ tr.cur.ign td{color:#8C8370}
 .graph svg{position:absolute;inset:0;width:100%;height:100%;display:block}
 .graph .tip{position:absolute;pointer-events:none;background:var(--ink);color:var(--paper);padding:.25rem .5rem;font-size:.85rem;white-space:nowrap;box-shadow:2px 2px 0 var(--muted);z-index:2}
 .gempty{position:absolute;inset:0;display:grid;place-items:center;text-align:center;padding:1rem;margin:0;color:var(--muted);font-size:.95rem}
-.table .scroll{flex:1;overflow:auto}
+.table .scroll{flex:1;min-height:0;overflow:auto}
 table{width:100%;border-collapse:collapse;font-size:1.02rem}
 th,td{padding:.32rem .55rem;border-bottom:1px solid rgba(26,26,26,.25);text-align:left;vertical-align:top}
 th{position:sticky;top:0;background:var(--paper);border-bottom:2px solid var(--ink);font-size:1.12rem;text-transform:uppercase;letter-spacing:.05em}
@@ -286,7 +292,8 @@ dialog.pix .row{display:flex;justify-content:flex-end;margin-top:1rem;padding:0 
           <button class="btn small" id="btnAddGroup" type="button" data-i18n="add"></button></div></div></div>
     <div class="frow"><label class="lbl" for="inDil" data-i18n="dilution"></label>
       <div class="fctl"><div class="unit"><span class="pre" id="dilPre"></span><input type="text" id="inDil" autocomplete="off" inputmode="decimal"><span class="suf" id="dilSuf"></span>
-        <button class="btn small" id="btnSetDil" type="button" data-i18n="setDil"></button></div></div></div>
+        <button class="btn small" id="btnSetDil" type="button" data-i18n="setDil"></button></div>
+        <div class="chips dils" id="dilChips"></div></div></div>
     <div class="frow"><label class="lbl" for="inVol" data-i18n="volume"></label>
       <div class="fctl"><div class="unit"><input type="text" id="inVol" autocomplete="off" inputmode="decimal"><span class="suf">µL</span>
         <button class="btn small" id="btnDilAll" type="button" data-i18n="dilAll"></button></div></div></div>
@@ -365,7 +372,7 @@ dialog.pix .row{display:flex;justify-content:flex-end;margin-top:1rem;padding:0 
 (() => {
 'use strict';
 const $ = id => document.getElementById(id);
-const VERSION = 'v23 · 11/11';
+const VERSION = 'v24 · 11/11';
 const SAVE_FILE = 'petri-comptage.json';
 const IMG_RE = /\.(jpe?g|png|webp|gif|bmp|avif)$/i;
 const canWriteFolder = typeof window.showDirectoryPicker === 'function'; // Chrome, Edge : lecture et écriture dans le dossier
@@ -402,7 +409,7 @@ const I18N = {
     csvHere:'In the image folder', csvElse:'Choose another location…', settings:'Settings', close:'Close',
     exportBtn:'Export', mCsv:'Table (.csv)', mPdf:'Report (.pdf)', newGroup:'New group',
     expName:'Experiment name', expDesc:'Short description', required:'required', optional:'optional', cancel:'Cancel', create:'Create report',
-    pdfEnglish:'The report is written in English so it can be shared as is.', incGraph:'Include summary graphs (CFU/sample per group and per sample, own pages)',
+    pdfEnglish:'The report is written in English so it can be shared as is.', incGraph:'Add a final page comparing all groups (CFU/sample)',
     folderData:'Counts for this folder', wipe:'Erase all counts for this folder',
     wipeTitle:'Erase everything?', wipeText: p => 'Counts, names and groups for the folder “' + p.f + '” will be deleted (' + p.s + ' file and browser copy). This cannot be undone: they cannot be recovered. The photos are not touched.',
     typeWord: p => 'Type “' + p.w + '” to confirm',
@@ -672,7 +679,7 @@ async function show(i){
   $('fileName').textContent = f.name; $('fileIdx').textContent = (idx + 1) + ' / ' + files.length;
   $('btnPrev').disabled = idx === 0; $('btnNext').disabled = idx === files.length - 1;
   renderAll(); scheduleSave();
-  const row = document.querySelector('#rows tr.cur'); if (row) row.scrollIntoView({ block:'nearest' });
+  revealRow();
 }
 $('btnPrev').addEventListener('click', () => show(idx - 1));
 $('btnNext').addEventListener('click', () => show(idx + 1));
@@ -884,7 +891,19 @@ function renderDil(){
   if (document.activeElement !== $('inDil')) $('inDil').value = t0 ? dilToInput(t0.dilution) : '';
   if (document.activeElement !== $('inVol')) $('inVol').value = t0 ? (t0.vol == null ? '' : t0.vol) : '';
   $('inDil').placeholder = n.pre === '1:' ? '10' : n.pre ? '1' : n.suf ? '10' : '0.1';
+  // cases des dilutions déjà utilisées dans le dossier, de la plus faible à la plus forte : elles apparaissent et disparaissent toutes seules
+  // (la valeur en cours de saisie n'y entre qu'une fois le champ quitté, pour ne pas créer « 1:1 » en tapant « 1:10 »)
+  const typing = document.activeElement === $('inDil'), used = new Set();
+  Object.values(data.images).forEach(r => [r, r.p2].forEach(fl => { if (fl && fl.dilution && !(typing && fl === t0)) used.add(fl.dilution); }));
+  const box = $('dilChips'); box.innerHTML = '';
+  [...used].sort((a, b) => (parseFactor(a) || Infinity) - (parseFactor(b) || Infinity) || a.localeCompare(b)).forEach(d => {
+    const c = document.createElement('span'); c.className = 'chip'; c.setAttribute('aria-pressed', String(!!t0 && t0.dilution === d));
+    const b = document.createElement('button'); b.type = 'button'; b.disabled = !t0; b.textContent = d;
+    b.addEventListener('click', () => { const t1 = tgt(); if (!t1) return; t1.dilution = C[cur()].dilution = t1.dilution === d ? '' : d; changed(); }); // re-cliquer : aucune
+    c.appendChild(b); box.appendChild(c);
+  });
 }
+$('inDil').addEventListener('blur', () => renderDil());
 $('inDil').addEventListener('input', e => { const t0 = tgt(); if (!t0) return; t0.dilution = C[cur()].dilution = dilFromInput(e.target.value); changed(); });
 $('inVol').addEventListener('input', e => { const t0 = tgt(); if (!t0) return; t0.vol = C[cur()].vol = e.target.value.trim(); changed(); });
 $('btnSetDil').addEventListener('click', () => {
@@ -966,7 +985,7 @@ let tab = 'res';
 function setTab(k){
   tab = k; $('tabRes').setAttribute('aria-selected', String(k === 'res')); $('tabGraph').setAttribute('aria-selected', String(k === 'graph'));
   $('paneRes').hidden = k !== 'res'; $('paneGraph').hidden = k !== 'graph';
-  if (k === 'graph') renderGraph();
+  if (k === 'graph') renderGraph(); else revealRow();
 }
 $('tabRes').addEventListener('click', () => setTab('res'));
 $('tabGraph').addEventListener('click', () => setTab('graph'));
@@ -1070,6 +1089,13 @@ function renderTable(){
     else { const n = finalName(r); row(n || stem(f.name), !n, shownCount(r, r.marks.length), null, r.status === 'ignored'); }
   });
 }
+// ligne en cours visible dans la liste, en ne faisant défiler que la liste (scrollIntoView ferait aussi bouger la page)
+function revealRow(){
+  const pane = $('paneRes'), row = document.querySelector('#rows tr.cur'); if (!row || pane.hidden) return;
+  const head = pane.querySelector('thead').offsetHeight, top = row.getBoundingClientRect().top - pane.getBoundingClientRect().top + pane.scrollTop, bot = top + row.offsetHeight;
+  if (top - head < pane.scrollTop) pane.scrollTop = top - head;
+  else if (bot > pane.scrollTop + pane.clientHeight) pane.scrollTop = bot - pane.clientHeight;
+}
 function renderAll(){
   const r = rec();
   $('count').textContent = !r ? 0 : dbl() ? countOf(r, 0) + ' · ' + countOf(r, 1) : r.marks.length; // mode 2 boîtes : boîte 1 · boîte 2
@@ -1163,7 +1189,7 @@ function groupTable(){
 }
 // Pages de synthèse, sobres : barres = moyenne (CFU/sample), barres d'erreur = écart-type, puis un tableau.
 // C = N × F / V pour chaque boîte (N colonies, F facteur de dilution, V volume en mL) ; boîtes à 0, NC ou ignorées exclues.
-function barPage(doc, header, { PW, PH, M, CW }, title, rows, caption, cols, rowVals){
+function barPage(doc, header, { PW, PH, M, CW }, title, rows, caption, cols, rowVals, foot){
   doc.addPage(); header();
   doc.setFont('helvetica', 'bold'); doc.setFontSize(12); doc.setTextColor(0); doc.text(title, M, 30);
   if (!rows.length){ doc.setFont('helvetica', 'normal'); doc.setFontSize(10); doc.setTextColor(90); doc.text('No plate has a count, a dilution and a volume yet.', M, 40); return; }
@@ -1202,24 +1228,39 @@ function barPage(doc, header, { PW, PH, M, CW }, title, rows, caption, cols, row
   };
   row(cols.map(c => c[0]), true);
   rows.forEach(r => { if (ty > PH - 20){ doc.addPage(); header(); ty = 28; row(cols.map(c => c[0]), true); } row(rowVals(r)); });
+  if (foot) row(foot, true); // ligne de synthèse en gras
+}
+const FORMULA = 'C = (N × F) / V for each plate: N = colonies counted, F = dilution factor, V = volume plated (mL). Plates marked 0 growth or NC, or without dilution or volume, are excluded.';
+// synthèse d'un groupe, après ses images : une barre par sample, le tableau, et la moyenne du groupe en dernière ligne
+function groupSummary(doc, header, geo, g){
+  const sp = sampleStats().filter(s => s.g === g).map(s => Object.assign(s, { n:s.plates.length })), gs = groupTable().find(s => s.g === g);
+  barPage(doc, header, geo, (g || 'No group') + ': summary', sp,
+    'Bars: mean CFU/sample over the plates (dilutions) of each sample. Error bars: standard deviation between plates (n > 1). Last row: mean and standard deviation of the sample means of the group. ' + FORMULA,
+    [['Sample', 56, 'l'], ['Plates', 13], ['Dilutions', 36, 'l'], ['Volumes (µL)', 24, 'l'], ['Mean', 24], ['SD', 22]],
+    r => [r.label, r.n, r.dils.join(', '), r.vols.join(', '), fmtC(r.m), r.n > 1 ? fmtC(r.sd) : '–'],
+    gs ? ['Group (' + gs.n + ' sample' + (gs.n > 1 ? 's' : '') + ')', '', '', '', fmtC(gs.m), gs.n > 1 ? fmtC(gs.sd) : '–'] : null);
 }
 function summaryPage(doc, header, geo){
-  const formula = 'C = (N × F) / V for each plate: N = colonies counted, F = dilution factor, V = volume plated (mL). Plates marked 0 growth or NC, or without dilution or volume, are excluded.';
+  const formula = FORMULA;
   barPage(doc, header, geo, 'CFU/sample per group', groupTable(),
     'Bars: mean CFU/sample of the samples in each group. Error bars: standard deviation between samples (n > 1). ' + formula,
     [['Group', 46, 'l'], ['Samples', 16], ['Mean', 24], ['SD', 22], ['Median', 24], ['Min', 22], ['Max', 22]],
     r => [r.label, r.n, fmtC(r.m), r.n > 1 ? fmtC(r.sd) : '–', fmtC(r.median), fmtC(r.min), fmtC(r.max)]);
-  const sp = sampleStats().map(s => Object.assign(s, { n:s.plates.length }));
-  barPage(doc, header, geo, 'CFU/sample per sample', sp,
-    'Bars: mean CFU/sample over the plates (dilutions) of each sample. Error bars: standard deviation between plates (n > 1). ' + formula,
-    [['Sample', 50, 'l'], ['Group', 26, 'l'], ['Plates', 13], ['Dilutions', 34, 'l'], ['Volumes (µL)', 22, 'l'], ['Mean', 22], ['SD', 19]],
-    r => [r.label, r.g || '–', r.n, r.dils.join(', '), r.vols.join(', '), fmtC(r.m), r.n > 1 ? fmtC(r.sd) : '–']);
 }
 async function buildReport(exp, desc, withGraph){
   const { jsPDF } = window.jspdf, doc = new jsPDF({ unit:'mm', format:'a4', orientation:'portrait' });
   const PW = 210, PH = 297, M = 15, CW = PW - 2*M; // images poubelles (« Ignore ») absentes du rapport
   const keep = (r, i) => ((i ? p2Of(r) : r).status || '') !== 'ignored';
-  const items = files.filter(f => { const r = data.images[f.name]; return r && !r.pending && (dbl() ? keep(r, 0) || keep(r, 1) : keep(r, 0)); });
+  // images regroupées par groupe (ordre de la liste des groupes, puis « No group ») ; en mode 2 boîtes, une image
+  // dont les boîtes sont dans deux groupes apparaît dans chacun, avec seulement la ligne de la boîte du groupe
+  const entries = [];
+  files.forEach(f => { const r = data.images[f.name]; if (!r || r.pending) return;
+    (dbl() ? [0, 1] : [0]).filter(i => keep(r, i)).forEach(i => entries.push({ f, r, i, g:fieldsOf(r, i).group || '' })); });
+  const gOrder = [...new Set((data.groups || []).concat(entries.map(e => e.g)))].filter(g => entries.some(e => e.g === g)).sort((a, b) => (a === '') - (b === ''));
+  const sections = gOrder.map(g => { const by = new Map();
+    entries.filter(e => e.g === g).forEach(e => { if (!by.has(e.f)) by.set(e.f, []); by.get(e.f).push(e.i); });
+    return { g, items:[...by].map(([f, pl]) => ({ f, pl })) }; });
+  const total = sections.reduce((a, sc) => a + sc.items.length, 0);
   const date = new Date().toLocaleDateString('en-GB', { year:'numeric', month:'long', day:'numeric' });
   const header = () => {
     doc.setFont('helvetica', 'bold'); doc.setFontSize(11); doc.setTextColor(0);
@@ -1229,35 +1270,43 @@ async function buildReport(exp, desc, withGraph){
     doc.text(date, PW - M, 12, { align:'right' });
     doc.setDrawColor(160); doc.setLineWidth(.2); doc.line(M, 20, PW - M, 20);
   };
-  header();
   let y = 26, n = 0;
-  for (const f of items){
-    toast(t('pdfBusy', { i:++n, n:items.length }));
-    const r = data.images[f.name], im = await reportImage(f, r);
-    let iw = CW, ih = CW * im.h / im.w; if (ih > 100){ ih = 100; iw = ih * im.w / im.h; }
-    const blockH = ih + 6 + 7*(dbl() ? 3 : 2) + 2;
-    if (y + blockH > PH - 14){ doc.addPage(); header(); y = 26; }
-    doc.addImage(im.url, 'JPEG', M + (CW - iw)/2, y, iw, ih);
-    y += ih + 4;
-    doc.setFont('helvetica', 'normal'); doc.setFontSize(8); doc.setTextColor(110);
-    doc.text('Image: ' + f.name, M, y);
-    y += 2;
-    // tableau : en-têtes, puis une ligne par boîte (nom, dilution, volume, colonies)
-    const rh = 7, wC = 24, wV = 26, wD = 30, c1 = CW - wC - wV - wD;
-    const lines = (dbl() ? [0, 1] : [0]).filter(i => keep(r, i)).map(i => { const fl = fieldsOf(r, i), n = dbl() ? countOf(r, i) : r.marks.length;
-      return [(dbl() ? (i + 1) + '. ' : '') + (finalName(fl) || stem(f.name) + (dbl() ? ' (' + (i + 1) + ')' : '')), fl.dilution || '–', fl.vol ? fl.vol + ' µL' : '–',
-        fl.status === 'zero' ? '0' : fl.status === 'nc' ? 'NC' : String(n)]; });
-    doc.setDrawColor(0); doc.setLineWidth(.25); doc.setFillColor(235, 235, 235);
-    doc.rect(M, y, CW, rh, 'FD'); lines.forEach((_, k) => doc.rect(M, y + rh*(k + 1), CW, rh));
-    [c1, c1 + wD, c1 + wD + wV].forEach(xx => doc.line(M + xx, y, M + xx, y + rh*(lines.length + 1)));
-    doc.setTextColor(0); doc.setFontSize(10); doc.setFont('helvetica', 'bold');
-    doc.text('Name', M + 2, y + 4.8); doc.text('Dilution', M + c1 + wD - 2, y + 4.8, { align:'right' }); doc.text('Volume', M + c1 + wD + wV - 2, y + 4.8, { align:'right' }); doc.text('CFU', M + CW - 2, y + 4.8, { align:'right' });
-    doc.setFont('helvetica', 'normal');
-    lines.forEach(([nm, d, v, n], k) => { const yy = y + rh*(k + 1) + 4.8;
-      doc.text(doc.splitTextToSize(nm, c1 - 4)[0], M + 2, yy); doc.text(d, M + c1 + wD - 2, yy, { align:'right' }); doc.text(v, M + c1 + wD + wV - 2, yy, { align:'right' }); doc.text(n, M + CW - 2, yy, { align:'right' }); });
-    y += rh*(lines.length + 1) + 10;
+  for (const [si, sc] of sections.entries()){
+    if (si) doc.addPage();
+    header(); y = 26;
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(14); doc.setTextColor(0); doc.text('Group: ' + (sc.g || 'No group'), M, y + 4);
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(9); doc.setTextColor(90);
+    doc.text(sc.items.length + ' image' + (sc.items.length > 1 ? 's' : ''), PW - M, y + 4, { align:'right' }); y += 12;
+    for (const { f, pl } of sc.items){
+      toast(t('pdfBusy', { i:++n, n:total }));
+      const r = data.images[f.name], im = await reportImage(f, r);
+      let iw = CW, ih = CW * im.h / im.w; if (ih > 100){ ih = 100; iw = ih * im.w / im.h; }
+      const blockH = ih + 6 + 7*(pl.length + 1) + 2;
+      if (y + blockH > PH - 14){ doc.addPage(); header(); y = 26; }
+      doc.addImage(im.url, 'JPEG', M + (CW - iw)/2, y, iw, ih);
+      y += ih + 4;
+      doc.setFont('helvetica', 'normal'); doc.setFontSize(8); doc.setTextColor(110);
+      doc.text('Image: ' + f.name, M, y);
+      y += 2;
+      // tableau : en-têtes, puis une ligne par boîte (nom, dilution, volume, colonies)
+      const rh = 7, wC = 24, wV = 26, wD = 30, c1 = CW - wC - wV - wD;
+      const lines = pl.map(i => { const fl = fieldsOf(r, i), n = dbl() ? countOf(r, i) : r.marks.length;
+        return [(dbl() ? (i + 1) + '. ' : '') + (finalName(fl) || stem(f.name) + (dbl() ? ' (' + (i + 1) + ')' : '')), fl.dilution || '–', fl.vol ? fl.vol + ' µL' : '–',
+          fl.status === 'zero' ? '0' : fl.status === 'nc' ? 'NC' : String(n)]; });
+      doc.setDrawColor(0); doc.setLineWidth(.25); doc.setFillColor(235, 235, 235);
+      doc.rect(M, y, CW, rh, 'FD'); lines.forEach((_, k) => doc.rect(M, y + rh*(k + 1), CW, rh));
+      [c1, c1 + wD, c1 + wD + wV].forEach(xx => doc.line(M + xx, y, M + xx, y + rh*(lines.length + 1)));
+      doc.setTextColor(0); doc.setFontSize(10); doc.setFont('helvetica', 'bold');
+      doc.text('Name', M + 2, y + 4.8); doc.text('Dilution', M + c1 + wD - 2, y + 4.8, { align:'right' }); doc.text('Volume', M + c1 + wD + wV - 2, y + 4.8, { align:'right' }); doc.text('CFU', M + CW - 2, y + 4.8, { align:'right' });
+      doc.setFont('helvetica', 'normal');
+      lines.forEach(([nm, d, v, n], k) => { const yy = y + rh*(k + 1) + 4.8;
+        doc.text(doc.splitTextToSize(nm, c1 - 4)[0], M + 2, yy); doc.text(d, M + c1 + wD - 2, yy, { align:'right' }); doc.text(v, M + c1 + wD + wV - 2, yy, { align:'right' }); doc.text(n, M + CW - 2, yy, { align:'right' }); });
+      y += rh*(lines.length + 1) + 10;
+    }
+    groupSummary(doc, header, { PW, PH, M, CW }, sc.g);
   }
-  if (withGraph) summaryPage(doc, header, { PW, PH, M, CW });
+  if (!sections.length) header();
+  if (withGraph && sections.length > 1) summaryPage(doc, header, { PW, PH, M, CW });
   const pages = doc.getNumberOfPages();
   for (let i = 1; i <= pages; i++){
     doc.setPage(i); doc.setFont('helvetica', 'normal'); doc.setFontSize(8); doc.setTextColor(110);
@@ -1293,7 +1342,7 @@ $('pdfForm').addEventListener('submit', async e => {
     if (!tg) return;
     await saveNow();
     toast(t('pdfDone', { f: await writeTarget(tg, await buildReport(exp, desc, withGraph)) }));
-  }catch(err){ toast(t('saveErr')); }
+  }catch(err){ console.error(err); toast(t('saveErr')); }
 });
 
 /* ---------- Clavier ---------- */
