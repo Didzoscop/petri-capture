@@ -429,7 +429,7 @@ body.manual .meters,body.manual .btn.lens{display:none}
 
 <dialog class="pix" id="mailDlg">
   <div id="mailStep1">
-    <h2 data-i18n="mailTitle"></h2>
+    <h2 id="mailTitle1" data-i18n="mailTitle"></h2>
     <label class="choice"><input type="radio" name="mailWhat" value="session" checked> <span id="mailSession"></span></label>
     <label class="choice"><input type="radio" name="mailWhat" value="all"> <span id="mailAll"></span></label>
     <div class="field" style="margin-top:.7rem">
@@ -440,7 +440,7 @@ body.manual .meters,body.manual .btn.lens{display:none}
         <option value="light" data-i18n="qualLight"></option>
       </select>
     </div>
-    <div class="field">
+    <div class="field" id="mailToBox">
       <label for="mailTo" data-i18n="emailLabel"></label>
       <input type="email" id="mailTo" autocomplete="email" inputmode="email" placeholder="name@example.org">
     </div>
@@ -458,13 +458,13 @@ body.manual .meters,body.manual .btn.lens{display:none}
 
 <div class="toast" id="toast" role="status"></div>
 
-<script src="mascot.js?v41"></script> <!-- ?vNN : à changer avec APP_VERSION, pour contourner le cache de GitHub Pages -->
-<script src="demo.js?v41"></script>
+<script src="mascot.js?v42"></script> <!-- ?vNN : à changer avec APP_VERSION, pour contourner le cache de GitHub Pages -->
+<script src="demo.js?v42"></script>
 <script>
 (() => {
 'use strict';
 const $ = id => document.getElementById(id);
-const APP_VERSION = 'v41 · 11/11'; // à incrémenter à chaque publication
+const APP_VERSION = 'v42 · 12/11'; // à incrémenter à chaque publication
 $('ver').textContent = APP_VERSION;
 
 /* ---------- Mascotte (dessin et animation dans mascot.js) ---------- */
@@ -475,7 +475,7 @@ const video = $('video'), svg = $('overlay');
 const SVGNS = 'http://www.w3.org/2000/svg';
 
 /* ---------- Réglages persistants ---------- */
-const DEFAULTS = { v:3, midScan:false, sens:20, presence:20, stableMs:400, motionTol:5, focusMs:1500, lockFocus:false, requireLid:true, sharpCheck:true, meters:true, sound:true, deviceId:'', zoom:1, calibMode:'aruco', lang:'en', resolution:'max', email:'', sessionGap:30, mailQuality:'medium' };
+const DEFAULTS = { v:3, midScan:false, sens:20, presence:20, stableMs:400, motionTol:5, focusMs:1500, lockFocus:false, requireLid:true, sharpCheck:true, meters:true, sound:true, deviceId:'', zoom:1, calibMode:'aruco', lang:'en', resolution:'max', email:'', sessionGap:30, mailQuality:'medium', zipQuality:'full' };
 const store = {
   get(k, d){ try{ const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; }catch(e){ return d; } },
   set(k, v){ try{ localStorage.setItem(k, JSON.stringify(v)); }catch(e){} }
@@ -495,7 +495,7 @@ const I18N = {
   en: {
     calibrate:'Calibrate', photos:'Photos', settings:'Settings', fullscreen:'Full screen', lens:'Lens',
     dish:'Dish', lid:'Lid', motion:'Motion', sharpness:'Sharpness', cancel:'Cancel', confirm:'Confirm',
-    savedPhotos:'Saved photos', close:'Close', share:'Save to gallery', zip:'Download .zip', zipBusy:'Preparing…',
+    savedPhotos:'Saved photos', close:'Close', share:'Save to gallery', zip:'Download .zip', zipGo:'Download', zipBusy:'Preparing…',
     clearExported:'Delete exported photos', exportNote:'Photos stay in the app until you delete them.',
     grpDetect:'Detection', sSens:'Difference threshold', sSensHelp:'Lower reacts to smaller changes from the empty base.',
     sPresence:'Area needed to detect', sPresenceHelp:'Share of the Dish circle that must change. Check the Dish meter with a dish in place.',
@@ -1630,9 +1630,9 @@ async function markExported(ids){
 }
 
 
-$('btnZip').addEventListener('click', async () => {
-  const all = await photoAll(); if (!all.length) return;
-  if (!window.JSZip){ toast(t('zipNA')); return; }
+// .zip : même fenêtre que l'e-mail (dernière session ou toutes les photos, qualité), sans destinataire
+$('btnZip').addEventListener('click', () => { if (!window.JSZip){ toast(t('zipNA')); return; } openExport('zip'); });
+async function makeZip(all){
   const btn = $('btnZip'); btn.disabled = true; btn.textContent = t('zipBusy');
   try{
     const zip = new JSZip();
@@ -1644,7 +1644,7 @@ $('btnZip').addEventListener('click', async () => {
       const dl = await window.claude.use('downloads');
       if (dl){
         try{ await dl.save({ filename:fname, data:blob }); done = true; }
-        catch(e){ if (e && e.code === 'declined'){ btn.textContent = t('zip'); btn.disabled = false; return; } }
+        catch(e){ if (e && e.code === 'declined'){ btn.textContent = t('zip'); btn.disabled = false; return false; } }
       }
     }
     if (!done){
@@ -1655,7 +1655,8 @@ $('btnZip').addEventListener('click', async () => {
     await markExported(all.map(r => r.id)); renderGrid(); toast(t('zipReady', { f:fname }));
   }catch(e){ toast(t('exportFail', { e:e.message || e })); }
   btn.textContent = t('zip'); btn.disabled = false;
-});
+  return true;
+}
 $('btnClearExported').addEventListener('click', async () => {
   const ex = (await photoAll()).filter(r => r.exported);
   if (!ex.length) return;
@@ -1696,16 +1697,21 @@ async function copyAddress(addr){
   try{ await navigator.clipboard.writeText(addr); toast(t('mailCopied')); return true; }
   catch(e){ try{ const ta = document.createElement('textarea'); ta.value = addr; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); ta.remove(); toast(t('mailCopied')); return true; }catch(e2){ return false; } }
 }
-$('btnMail').addEventListener('click', async () => {
+let exportKind = 'mail'; // 'mail' ou 'zip' : la fenêtre sert aux deux
+$('btnMail').addEventListener('click', () => openExport('mail'));
+async function openExport(kind){
+  exportKind = kind;
   mailAllRecs = (await photoAll()).sort((a, b) => a.id - b.id);
   if (!mailAllRecs.length){ toast(t('mailNone')); return; }
   const ses = lastSession(mailAllRecs);
   $('mailSession').textContent = t('mailSession', { n:ses.length, from:dayOf(ses[0].id) + ' ' + hm(ses[0].id), to:hm(ses[ses.length-1].id) });
   $('mailAll').textContent = t('mailAll', { n:mailAllRecs.length });
   document.querySelector('input[name=mailWhat][value=session]').checked = true;
-  $('mailTo').value = settings.email; $('mailQuality').value = settings.mailQuality; syncSelects(); $('mailStep1').hidden = false; $('mailStep2').hidden = true;
+  const zip = kind === 'zip';
+  $('mailTitle1').textContent = t(zip ? 'zip' : 'mailTitle'); $('mailToBox').hidden = zip; $('mailPrepare').textContent = t(zip ? 'zipGo' : 'mailPrepare');
+  $('mailTo').value = settings.email; $('mailQuality').value = zip ? settings.zipQuality : settings.mailQuality; syncSelects(); $('mailStep1').hidden = false; $('mailStep2').hidden = true;
   $('mailDlg').showModal();
-});
+}
 $('mailCancel').addEventListener('click', () => $('mailDlg').close());
 $('mailClose').addEventListener('click', () => $('mailDlg').close());
 $('mailCopy').addEventListener('click', () => copyAddress(settings.email));
@@ -1721,6 +1727,17 @@ async function reencode(r, level){
   return Object.assign({}, r, { blob });
 }
 $('mailPrepare').addEventListener('click', async () => {
+  if (exportKind === 'zip'){
+    let recs = document.querySelector('input[name=mailWhat]:checked').value === 'all' ? mailAllRecs : lastSession(mailAllRecs);
+    const quality = $('mailQuality').value; settings.zipQuality = quality; store.set('petri.settings', settings);
+    const btn = $('mailPrepare'); btn.disabled = true; btn.textContent = t('zipBusy');
+    try{
+      if (quality !== 'full'){ const out = []; for (const r of recs) out.push(await reencode(r, quality)); recs = out; }
+      if (await makeZip(recs)) $('mailDlg').close();
+    }catch(e){ toast(t('exportFail', { e:e.message || e })); }
+    btn.disabled = false; btn.textContent = t('zipGo');
+    return;
+  }
   const addr = $('mailTo').value.trim();
   if (!validMail(addr)){ toast(t('mailBadAddr')); $('mailTo').focus(); return; }
   settings.email = addr; store.set('petri.settings', settings); $('setEmail').value = addr;
