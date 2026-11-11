@@ -237,6 +237,9 @@ dialog.pix .row{display:flex;justify-content:flex-end;margin-top:1rem;padding:0 
         <div class="mhead" data-i18n="mCsv"></div>
         <button type="button" role="menuitem" id="csvHere" data-i18n="csvHere"></button>
         <button type="button" role="menuitem" id="csvElse" data-i18n="csvElse"></button>
+        <div class="mhead" data-i18n="mXlsx"></div>
+        <button type="button" role="menuitem" id="xlsxHere" data-i18n="csvHere"></button>
+        <button type="button" role="menuitem" id="xlsxElse" data-i18n="csvElse"></button>
         <div class="mhead" data-i18n="mPdf"></div>
         <button type="button" role="menuitem" id="pdfHere" data-i18n="csvHere"></button>
         <button type="button" role="menuitem" id="pdfElse" data-i18n="csvElse"></button>
@@ -372,7 +375,7 @@ dialog.pix .row{display:flex;justify-content:flex-end;margin-top:1rem;padding:0 
 (() => {
 'use strict';
 const $ = id => document.getElementById(id);
-const VERSION = 'v25 · 11/11';
+const VERSION = 'v26 · 12/11';
 const SAVE_FILE = 'petri-comptage.json';
 const IMG_RE = /\.(jpe?g|png|webp|gif|bmp|avif)$/i;
 const canWriteFolder = typeof window.showDirectoryPicker === 'function'; // Chrome, Edge : lecture et écriture dans le dossier
@@ -407,7 +410,7 @@ const I18N = {
     saveErr:'Save failed', csvDone: p => 'Table saved: ' + p.f,
     loaded: p => p.n + ' images, save restored.', found: p => p.n + ' images found.', permDenied:'Folder access denied.',
     csvHere:'In the image folder', csvElse:'Choose another location…', settings:'Settings', close:'Close',
-    exportBtn:'Export', mCsv:'Table (.csv)', mPdf:'Report (.pdf)', newGroup:'New group',
+    exportBtn:'Export', mCsv:'Table (.csv)', mXlsx:'Excel (.xlsx)', xlsxNoLib:'The Excel module could not load (offline?).', mPdf:'Report (.pdf)', newGroup:'New group',
     expName:'Experiment name', expDesc:'Short description', required:'required', optional:'optional', cancel:'Cancel', create:'Create report',
     pdfEnglish:'The report is written in English so it can be shared as is.', incGraph:'Add a final page comparing all groups (CFU/sample)',
     folderData:'Counts for this folder', wipe:'Erase all counts for this folder',
@@ -1122,7 +1125,7 @@ function csvText(){
 }
 const csvName = () => 'comptage_' + folder.replace(/[^\w.-]+/g, '_') + '.csv';
 async function writeTo(fh, text){ const w = await fh.createWritable(); await w.write(text); await w.close(); }
-function openMenu(on){ $('csvMenu').hidden = !on; $('btnCsv').setAttribute('aria-expanded', String(on)); if (on) $('csvHere').disabled = $('pdfHere').disabled = !dir; }
+function openMenu(on){ $('csvMenu').hidden = !on; $('btnCsv').setAttribute('aria-expanded', String(on)); if (on) $('csvHere').disabled = $('xlsxHere').disabled = $('pdfHere').disabled = !dir; }
 // Où enregistrer : dossier des images (here), fenêtre « Enregistrer sous » (Chrome, Edge), sinon téléchargement.
 // La fenêtre doit s'ouvrir juste après le clic : on choisit donc l'emplacement avant de préparer le contenu.
 async function pickTarget(fname, mime, ext, here){
@@ -1151,6 +1154,53 @@ async function exportCsv(here){
 }
 $('csvHere').addEventListener('click', () => exportCsv(true));
 $('csvElse').addEventListener('click', () => exportCsv(false));
+/* Classeur Excel : onglet « Plates » (comme le CSV, une ligne par boîte), onglet « Samples » (moyenne des CFU/sample
+   des boîtes d'un même sample, toutes dilutions confondues) et onglet « Groups ». Module SheetJS chargé au premier export. */
+let xlsxLib = null;
+function loadXlsx(){
+  if (window.XLSX) return Promise.resolve(window.XLSX);
+  return xlsxLib || (xlsxLib = new Promise((res, rej) => { const sc = document.createElement('script');
+    sc.src = 'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
+    sc.onload = () => window.XLSX ? res(window.XLSX) : rej(new Error('xlsx')); sc.onerror = () => { xlsxLib = null; rej(new Error('xlsx')); };
+    document.head.appendChild(sc); }));
+}
+const r1 = v => v == null || !isFinite(v) ? '' : Math.round(v * 10) / 10;
+function workbook(X){
+  const rows = plateRows(), stat = { '':'counted', zero:'0 growth', nc:'NC' };
+  const plates = [[t('colName'), 'Sample', 'Group', 'CFU', 'Status', 'Dilution', 'Dilution factor', 'Volume (µL)', 'CFU/sample', 'Image'].concat(dbl() ? ['Plate'] : [])];
+  rows.forEach(pr => { const v = parseFloat(String(pr.fields.vol || '').replace(',', '.'));
+    plates.push([sampleName(pr), sampleLabel(pr), pr.fields.group || '', pr.status === 'nc' ? 'NC' : pr.n, stat[pr.status], pr.fields.dilution || '',
+      pr.F || '', isFinite(v) ? v : (pr.fields.vol || ''), r1(pr.C), pr.f.name].concat(dbl() ? [pr.plate + 1] : [])); });
+  // samples : toutes les boîtes du sample, celles qui comptent pour la moyenne et celles exclues (0, NC, sans dilution ou volume)
+  const by = new Map();
+  rows.forEach(pr => { const k = sampleKey(pr); if (!by.has(k)) by.set(k, { label:sampleLabel(pr), g:pr.fields.group || '', all:[] }); by.get(k).all.push(pr); });
+  const gOrder = [...data.groups, ...[...by.values()].map(sp => sp.g).filter(g => g && !data.groups.includes(g)), ''];
+  const list = [...by.values()].sort((a, b) => gOrder.indexOf(a.g) - gOrder.indexOf(b.g) || a.label.localeCompare(b.label, undefined, { numeric:true }));
+  const samples = [['Sample', 'Group', 'Plates used', 'Plates excluded', 'Dilutions', 'Volumes (µL)', 'Mean CFU/sample', 'SD', 'CFU/sample of each plate']];
+  list.forEach(sp => { const ok = sp.all.filter(p => p.ok), ms = ok.length ? meanSd(ok.map(p => p.C)) : null;
+    samples.push([sp.label, sp.g || t('noGroup'), ok.length, sp.all.length - ok.length, [...new Set(ok.map(p => p.fields.dilution))].join(', '),
+      [...new Set(ok.map(p => p.fields.vol))].join(', '), ms ? r1(ms.m) : '', ms && ok.length > 1 ? r1(ms.sd) : '', ok.map(p => fmtC(p.C)).join('; ')]); });
+  samples.push([], ['Mean = average of C = (N × F) / V over the plates of the sample (N colonies, F dilution factor, V volume in mL). Plates with 0 growth, NC, or without dilution or volume are excluded.']);
+  const groups = [['Group', 'Samples', 'Mean CFU/sample', 'SD', 'Median', 'Min', 'Max']];
+  groupTable().forEach(gs => groups.push([gs.label, gs.n, r1(gs.m), gs.n > 1 ? r1(gs.sd) : '', r1(gs.median), r1(gs.min), r1(gs.max)]));
+  const wb = X.utils.book_new(), sheet = (aoa, widths) => { const ws = X.utils.aoa_to_sheet(aoa); ws['!cols'] = widths.map(w => ({ wch:w })); return ws; };
+  X.utils.book_append_sheet(wb, sheet(plates, [28, 24, 14, 7, 10, 10, 10, 11, 12, 26, 6]), 'Plates');
+  X.utils.book_append_sheet(wb, sheet(samples, [24, 14, 11, 14, 18, 13, 16, 10, 30]), 'Samples');
+  X.utils.book_append_sheet(wb, sheet(groups, [18, 9, 16, 10, 10, 10, 10]), 'Groups');
+  return new Blob([X.write(wb, { bookType:'xlsx', type:'array' })], { type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+}
+async function exportXlsx(here){
+  openMenu(false);
+  const lib = loadXlsx().catch(() => null); // chargé pendant le choix de l'emplacement
+  await saveNow();
+  try{
+    const tg = await pickTarget(csvName().replace(/\.csv$/, '.xlsx'), 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'xlsx', here); if (!tg) return;
+    const X = await lib; if (!X){ toast(t('xlsxNoLib')); return; }
+    toast(t('csvDone', { f: await writeTarget(tg, workbook(X)) }));
+  }catch(e){ console.error(e); toast(t('saveErr')); }
+}
+$('xlsxHere').addEventListener('click', () => exportXlsx(true));
+$('xlsxElse').addEventListener('click', () => exportXlsx(false));
 
 /* Rapport PDF, volontairement sobre (Helvetica, noir et blanc) pour être transmis tel quel :
    deux images par page A4, chacune entière avec ses repères (sans numéros), suivie d'un tableau Nom / CFU. */
