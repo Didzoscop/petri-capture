@@ -84,7 +84,7 @@ input[type=text]:focus{outline:none;background:#fff}
 .nav .btn{min-width:9rem}
 
 /* ---------- Panneau de droite : compteur, nom, tableau ---------- */
-.side{display:flex;flex-direction:column;gap:.7rem;min-height:0;padding:.7rem 1rem .8rem .3rem;overflow-y:auto} /* défile si tout ne tient pas (mode 2 boîtes) */
+.side{display:flex;flex-direction:column;gap:.7rem;min-height:0;padding:.7rem 1rem .8rem .3rem;overflow-y:auto;overflow-x:hidden} /* défile si tout ne tient pas (mode 2 boîtes) */
 .side > .card{flex:none}
 .card{background:var(--paper);border:var(--b) solid var(--ink);box-shadow:var(--b) var(--b) 0 var(--ink);padding:.6rem .7rem}
 .counter{display:flex;align-items:center;gap:.6rem}
@@ -126,6 +126,13 @@ input[type=text]:focus{outline:none;background:#fff}
 .naming .chips.plates .chip{font-size:.95rem}
 .naming .final .pl{display:block}
 .naming .final .pl.off{font-weight:400;color:var(--muted)}
+.naming .unit{display:flex;align-items:center;gap:.3rem .3rem;flex-wrap:wrap}
+.naming .unit input{flex:0 1 4.6rem;width:4.6rem;min-width:3rem}
+.naming .unit .pre,.naming .unit .suf{color:var(--muted);font-size:.95rem;white-space:nowrap}
+.naming .unit .btn{flex:none;margin-left:auto}
+#dilNotes .choice{margin:.25rem 0}
+tr.ign td{color:#B5AC98;text-decoration:line-through}
+tr.cur.ign td{color:#8C8370}
 .naming .final{margin-top:.2rem;padding:.2rem .45rem;font-size:.95rem;min-height:calc(1.35em + .4rem + 4px)}
 /* tableau toujours visible, il prend la place qui reste */
 .table{flex:1 0 16rem;min-height:16rem;display:flex;flex-direction:column;padding:0}
@@ -277,10 +284,14 @@ dialog.pix .row{display:flex;justify-content:flex-end;margin-top:1rem;padding:0 
       <div class="fctl"><div class="chips" id="chips"></div>
         <div class="inline" id="groupAdd" hidden><input type="text" id="inGroup" autocomplete="off" data-i18n-ph="groupPh">
           <button class="btn small" id="btnAddGroup" type="button" data-i18n="add"></button></div></div></div>
-    <div class="frow stack"><span class="lbl" data-i18n="dilution"></span>
-      <div class="fctl"><div class="chips" id="dilChips"></div>
-        <div class="inline" id="dilAdd" hidden><input type="text" id="inDil" autocomplete="off" data-i18n-ph="dilPh">
-          <button class="btn small" id="btnAddDil" type="button" data-i18n="add"></button></div></div></div>
+    <div class="frow"><label class="lbl" for="inDil" data-i18n="dilution"></label>
+      <div class="fctl"><div class="unit"><span class="pre" id="dilPre"></span><input type="text" id="inDil" autocomplete="off" inputmode="decimal"><span class="suf" id="dilSuf"></span>
+        <button class="btn small" id="btnSetDil" type="button" data-i18n="setDil"></button></div></div></div>
+    <div class="frow"><label class="lbl" for="inVol" data-i18n="volume"></label>
+      <div class="fctl"><div class="unit"><input type="text" id="inVol" autocomplete="off" inputmode="decimal"><span class="suf">µL</span>
+        <button class="btn small" id="btnDilAll" type="button" data-i18n="dilAll"></button></div></div></div>
+    <div class="frow stack"><span class="lbl" data-i18n="status"></span>
+      <div class="fctl"><div class="chips" id="statusChips"></div></div></div>
     <div class="frow"><label class="lbl" for="inName" data-i18n="name"></label>
       <div class="fctl"><input type="text" id="inName" autocomplete="off" data-i18n-ph="namePh"></div></div>
     <div class="final" id="finalName"></div>
@@ -315,6 +326,13 @@ dialog.pix .row{display:flex;justify-content:flex-end;margin-top:1rem;padding:0 
   <div class="row"><button class="btn primary" id="setClose" type="button" data-i18n="close"></button></div>
 </dialog>
 
+<dialog class="pix" id="dilDlg">
+  <h2 data-i18n="setDil"></h2>
+  <p class="muted" style="font-size:.85rem;margin:.2rem 0 .6rem" data-i18n="dilHow"></p>
+  <div id="dilNotes"></div>
+  <div class="row" style="gap:.7rem"><button class="btn" id="dilCancel" type="button" data-i18n="cancel"></button><button class="btn primary" id="dilOk" type="button">OK</button></div>
+</dialog>
+
 <dialog class="pix" id="askDlg">
   <h2 id="askTitle"></h2>
   <p id="askText"></p>
@@ -347,7 +365,7 @@ dialog.pix .row{display:flex;justify-content:flex-end;margin-top:1rem;padding:0 
 (() => {
 'use strict';
 const $ = id => document.getElementById(id);
-const VERSION = 'v22 · 06/11';
+const VERSION = 'v23 · 11/11';
 const SAVE_FILE = 'petri-comptage.json';
 const IMG_RE = /\.(jpe?g|png|webp|gif|bmp|avif)$/i;
 const canWriteFolder = typeof window.showDirectoryPicker === 'function'; // Chrome, Edge : lecture et écriture dans le dossier
@@ -369,16 +387,22 @@ const I18N = {
     prefixAllD: p => 'All ' + p.n + ' images of the folder will get this prefix, including those not opened yet. The ↶ ↷ arrows on this image can undo it.', apply:'Apply',
     onePlate:'1 plate', twoPlates:'2 plates', adjust:'Adjust circles', adjustDone:'Done', plateN: p => 'Plate ' + p.n,
     adjustHint:'Drag a circle to move it, drag its edge to resize it. Click Done to count again.',
-    group:'Group', groupPh:'New group…', dilution:'Dilution', dilPh:'e.g. 1:10', newDil:'New dilution', add:'Add', name:'Name', namePh:'e.g. 10-3', results:'Results', colName:'Name', graph:'Graph', noGroup:'No group', copyGraph:'Copy the graph', graphCopied:'Graph copied to the clipboard.', copyFail:'Could not copy the graph.',
-    graphEmpty:'Tick a group for the counted images to see the mean count per group.',
-    graphTip: p => p.g + ': mean ' + p.m + ' CFU (SD ' + p.sd + ', n = ' + p.n + ')',
+    group:'Group', groupPh:'New group…', dilution:'Dilution', volume:'Volume', setDil:'Set dilution', dilAll:'Apply to all plates', status:'Status',
+    dilHow:'Choose how dilutions are written for this folder. Each plate then only needs the number.',
+    noteColon:'1:X  (1:10, 1:100…)', notePow:'10^-X  (10^-1, 10^-2…)', notePct:'Percent  (10 %, 1 %…)', noteDec:'Decimal  (0.1, 0.01…)',
+    stCounted:'Counted', stZero:'0 growth', stNC:'NC', stIgnored:'Ignore',
+    dilAllQ: p => 'Apply dilution ' + (p.d || '(none)') + ' and volume ' + (p.v || '–') + ' µL to all plates?',
+    dilAllD: p => 'All ' + p.n + ' images of the folder (every plate) will get these values. The ↶ ↷ arrows on this image can undo it.',
+    unitC:'CFU/sample', add:'Add', name:'Name', namePh:'e.g. 10-3', results:'Results', colName:'Name', graph:'Graph', noGroup:'No group', copyGraph:'Copy the graph', graphCopied:'Graph copied to the clipboard.', copyFail:'Could not copy the graph.',
+    graphEmpty:'Tick a group, a dilution and a volume for the counted plates to see the mean CFU/sample per group.',
+    graphTip: p => p.g + ': mean ' + p.m + ' CFU/sample (SD ' + p.sd + ', ' + p.n + ' sample' + (p.n > 1 ? 's' : '') + ')',
     noImages:'No images found in this folder.', savedFolder:'Saved in the folder', savedLocal:'Saved in the browser',
     saveErr:'Save failed', csvDone: p => 'Table saved: ' + p.f,
     loaded: p => p.n + ' images, save restored.', found: p => p.n + ' images found.', permDenied:'Folder access denied.',
     csvHere:'In the image folder', csvElse:'Choose another location…', settings:'Settings', close:'Close',
     exportBtn:'Export', mCsv:'Table (.csv)', mPdf:'Report (.pdf)', newGroup:'New group',
     expName:'Experiment name', expDesc:'Short description', required:'required', optional:'optional', cancel:'Cancel', create:'Create report',
-    pdfEnglish:'The report is written in English so it can be shared as is.', incGraph:'Include a summary graph (mean per group, own page)',
+    pdfEnglish:'The report is written in English so it can be shared as is.', incGraph:'Include summary graphs (CFU/sample per group and per sample, own pages)',
     folderData:'Counts for this folder', wipe:'Erase all counts for this folder',
     wipeTitle:'Erase everything?', wipeText: p => 'Counts, names and groups for the folder “' + p.f + '” will be deleted (' + p.s + ' file and browser copy). This cannot be undone: they cannot be recovered. The photos are not touched.',
     typeWord: p => 'Type “' + p.w + '” to confirm',
@@ -472,8 +496,8 @@ function toast(msg){ const e = $('toast'); e.textContent = msg; e.classList.add(
 let dir = null, folder = '', files = [], idx = -1;
 let data = blank();
 // valeurs reportées sur chaque nouvelle image tant qu'on ne les change pas : C[0] pour la boîte (ou la boîte 1), C[1] pour la boîte 2
-const C = [{ prefix:'', group:'', dilution:'' }, { prefix:'', group:'', dilution:'' }];
-const resetCarry = () => { C[0] = { prefix:'', group:'', dilution:'' }; C[1] = { prefix:'', group:'', dilution:'' }; };
+const C = [{ prefix:'', group:'', dilution:'', vol:'100' }, { prefix:'', group:'', dilution:'', vol:'100' }];
+const resetCarry = () => { C[0] = { prefix:'', group:'', dilution:'', vol:'100' }; C[1] = { prefix:'', group:'', dilution:'', vol:'100' }; };
 /* ---------- Mode 2 boîtes ----------
    Deux cercles (communs à tout le dossier, x/y en fractions de l'image, r en fraction de la largeur) délimitent les boîtes.
    Boîte 1 = les champs de l'image (prefix, group, dilution, name) ; boîte 2 = image.p2. Chaque repère appartient à la boîte
@@ -481,7 +505,7 @@ const resetCarry = () => { C[0] = { prefix:'', group:'', dilution:'' }; C[1] = {
 const dbl = () => !!data.double;
 let plate = 0, adjusting = false;
 const circles = () => data.circles || (data.circles = [{ x:.27, y:.5, r:.21 }, { x:.73, y:.5, r:.21 }]);
-function p2Of(r){ if (!r.p2) r.p2 = { prefix:r.prefix || '', group:'', dilution:'', name:'' }; return r.p2; }
+function p2Of(r){ if (!r.p2) r.p2 = { prefix:r.prefix || '', group:'', dilution:'', vol:r.vol || '100', name:'' }; return r.p2; }
 const fieldsOf = (r, i) => i ? p2Of(r) : r;
 const cur = () => dbl() ? plate : 0;
 const tgt = () => { const r = rec(); return r && fieldsOf(r, cur()); };
@@ -496,7 +520,27 @@ function samples(){
   return out;
 }
 const sampleName = sm => finalName(sm.fields) || stem(sm.f.name) + (sm.plate != null ? ' (' + (sm.plate + 1) + ')' : '');
-const counted = sm => sm.count > 0 || !!(sm.fields.name || '').trim(); // images comptées ou nommées (statistiques)
+// Une boîte : n colonies (0 si « 0 growth »), F facteur de dilution, V volume en mL ; C = N × F / V si la boîte compte
+const volML = fl => { const v = parseFloat(String(fl.vol == null ? '' : fl.vol).replace(',', '.')); return v > 0 ? v / 1000 : 0; };
+function plateRows(){
+  return samples().filter(sm => (sm.fields.status || '') !== 'ignored').map(sm => {
+    const st = sm.fields.status || '', n = st === 'zero' ? 0 : sm.count, F = parseFactor(sm.fields.dilution), V = volML(sm.fields);
+    const ok = !st && n > 0 && F > 0 && V > 0; // 0, NC, sans dilution ou sans volume : hors calcul
+    return Object.assign({}, sm, { status:st, n, F, V, C: ok ? n * F / V : null, ok });
+  });
+}
+// sample = même préfixe, même groupe, même nom (la dilution et le volume peuvent varier) ; sans nom : la boîte seule
+const sampleKey = pr => { const fl = pr.fields, nm = (fl.name || '').trim(); return [fl.prefix, fl.group].map(v => (v || '').trim()).concat(nm || ('#' + pr.f.name + (pr.plate || 0))).join('\u0001'); };
+const sampleLabel = pr => [pr.fields.prefix, pr.fields.group, pr.fields.name].map(v => (v || '').trim()).filter(Boolean).join(S.sep) || stem(pr.f.name);
+const meanSd = v => { const m = v.reduce((a, b) => a + b, 0) / v.length; return { m, sd: v.length > 1 ? Math.sqrt(v.reduce((a, b) => a + (b - m)**2, 0) / (v.length - 1)) : 0 }; };
+function sampleStats(){
+  const by = new Map();
+  plateRows().filter(pr => pr.ok).forEach(pr => { const k = sampleKey(pr); if (!by.has(k)) by.set(k, { key:k, label:sampleLabel(pr), g:pr.fields.group || '', plates:[] }); by.get(k).plates.push(pr); });
+  return [...by.values()].map(sp => Object.assign(sp, meanSd(sp.plates.map(p => p.C)), {
+    dils:[...new Set(sp.plates.map(p => p.fields.dilution))], vols:[...new Set(sp.plates.map(p => p.fields.vol))] }));
+}
+// nombres de CFU : notation scientifique au-delà de 100 000
+const fmtC = v => v == null || !isFinite(v) ? '–' : Math.abs(v) >= 1e5 ? v.toExponential(2).replace('e+', 'e') : String(Math.round(v * 10) / 10);
 const hist = {};                      // annuler / rétablir, par image : { undo:[…], redo:[…] }
 function blank(){ return { version:1, prefix:'', group:'', groups:[], dilution:'', dilutions:[], images:{} }; }
 const localKey = () => 'petri.count.' + folder;
@@ -549,8 +593,8 @@ async function load(name, list, saved){
     if (!(await ask(t('restoreTitle'), t('restoreText', { s:SAVE_FILE, n }), t('restoreYes'), t('restoreNo')))){ try{ localStorage.removeItem(localKey()); }catch(e){} local = null; }
   }
   data = Object.assign(blank(), saved && saved.images ? saved : local && local.images ? local : {});
-  C[0] = { prefix:data.prefix || '', group:data.group || '', dilution:data.dilution || '' };
-  C[1] = Object.assign({ prefix:C[0].prefix, group:'', dilution:'' }, data.carry2 || {}); plate = 0; adjusting = false;
+  C[0] = { prefix:data.prefix || '', group:data.group || '', dilution:data.dilution || '', vol:data.vol || '100' };
+  C[1] = Object.assign({ prefix:C[0].prefix, group:'', dilution:'', vol:C[0].vol }, data.carry2 || {}); plate = 0; adjusting = false;
   for (const k in hist) delete hist[k];
   $('folderName').hidden = false; $('folderName').title = t('folderTip'); $('folderName').innerHTML = FOLDER_SVG; const fn = document.createElement('span'); fn.textContent = folder; $('folderName').appendChild(fn);
   $('btnCsv').disabled = !files.length;
@@ -581,7 +625,7 @@ function scheduleSave(){ clearTimeout(saveTimer); saveTimer = setTimeout(saveNow
 function saveNow(){
   clearTimeout(saveTimer);
   if (!folder) return saving;
-  data.prefix = C[0].prefix; data.group = C[0].group; data.dilution = C[0].dilution; data.carry2 = C[1];
+  data.prefix = C[0].prefix; data.group = C[0].group; data.dilution = C[0].dilution; data.vol = C[0].vol; data.carry2 = C[1];
   const json = JSON.stringify(data, null, 1);
   saving = saving.then(async () => {
     const okLocal = store.set(localKey(), data);
@@ -606,8 +650,13 @@ async function show(i){
   // nouvelle image : préfixe et groupe repris, nom vidé
   // boîte 2 : sans préfixe propre, elle reprend celui de la boîte 1
   const p2New = () => Object.assign({}, C[1], { prefix:C[1].prefix || C[0].prefix, name:'' });
-  if (!data.images[f.name]) data.images[f.name] = { prefix:C[0].prefix, group:C[0].group, dilution:C[0].dilution, name:'', marks:[], p2:p2New() };
-  else if (data.images[f.name].pending){ const p = data.images[f.name]; p.group = C[0].group; p.dilution = C[0].dilution; p.p2 = Object.assign(p2New(), { prefix:p.prefix }); delete p.pending; } // ouverte pour la 1re fois
+  if (!data.images[f.name]) data.images[f.name] = { prefix:C[0].prefix, group:C[0].group, dilution:C[0].dilution, vol:C[0].vol, name:'', marks:[], p2:p2New() };
+  else if (data.images[f.name].pending){ // ouverte pour la 1re fois : les valeurs déjà appliquées (« All ») sont gardées, le reste vient du report
+    const p = data.images[f.name];
+    ['prefix', 'group', 'dilution', 'vol'].forEach(k => { if (p[k] === undefined) p[k] = C[0][k]; });
+    const q = p2New(); p.p2 = Object.assign(q, p.p2 || {}); if (p.p2.prefix === undefined || p.p2.prefix === '') p.p2.prefix = q.prefix || p.prefix;
+    delete p.pending;
+  }
   const r = rec();
   syncInputs(); // revoir une image ne change pas ce qui est reporté sur les suivantes
   const file = f.file || await f.handle.getFile();
@@ -706,12 +755,23 @@ function clickAt(cx, cy){
   else apply({ op:'add', i:r.marks.length, m:[x / natW, y / natH] });
 }
 function doOp(a, reverse){
+  if (a.op === 'dilAll'){
+    for (const k in a.before){ const r = data.images[k], b = a.before[k]; if (!r) continue;
+      if (reverse){ r.dilution = b.d; r.vol = b.v; if (r.p2 && b.p2){ r.p2.dilution = b.p2.d; r.p2.vol = b.p2.v; } }
+      else { r.dilution = a.d; r.vol = a.v; p2Of(r).dilution = a.d; p2Of(r).vol = a.v; } }
+    (a.created || []).forEach(k => {
+      if (reverse){ if (data.images[k] && data.images[k].pending) delete data.images[k]; }
+      else if (!data.images[k]) data.images[k] = { dilution:a.d, vol:a.v, name:'', marks:[], p2:{ dilution:a.d, vol:a.v }, pending:true };
+    });
+    if (!reverse){ C.forEach(c => { c.dilution = a.d; c.vol = a.v; }); } // et pour les prochaines images
+    renderDil(); return;
+  }
   if (a.op === 'prefixAll'){
     for (const k in a.before) if (data.images[k]) data.images[k].prefix = reverse ? a.before[k] : a.value;
     // images pas encore ouvertes : entrée « en attente » (préfixe seul), retirée à l'annulation si toujours pas ouverte
     (a.created || []).forEach(k => {
       if (reverse){ if (data.images[k] && data.images[k].pending) delete data.images[k]; }
-      else if (!data.images[k]) data.images[k] = { prefix:a.value, group:'', dilution:'', name:'', marks:[], pending:true };
+      else if (!data.images[k]) data.images[k] = { prefix:a.value, name:'', marks:[], pending:true };
     });
     const r = rec(); if (r){ C[0].prefix = r.prefix; syncInputs(); }
     return;
@@ -762,7 +822,6 @@ async function prefixToAll(){
 // Groupes et dilutions : même fonctionnement (liste à cocher, « + » pour en ajouter, reportés sur les images suivantes)
 const LISTS = {
   group:    { list:'groups',    box:'chips',    add:'groupAdd', input:'inGroup', btn:'btnAddGroup', newKey:'newGroup' },
-  dilution: { list:'dilutions', box:'dilChips', add:'dilAdd',   input:'inDil',   btn:'btnAddDil',   newKey:'newDil' }
 };
 const getLast = k => C[cur()][k];
 const setLast = (k, v) => { C[cur()][k] = v; };
@@ -801,7 +860,62 @@ function renderList(k){
   pb.addEventListener('click', () => showAdd(k, $(L.add).hidden));
   plus.appendChild(pb); box.appendChild(plus);
 }
-function renderChips(){ renderList('group'); renderList('dilution'); }
+function renderChips(){ renderList('group'); renderDil(); renderStatus(); }
+/* ---------- Dilution (notation choisie pour le dossier), volume, statut ----------
+   La dilution est gardée telle qu'affichée (« 1:10 », « 10^-2 », « 1% », « 0.01 ») ; le facteur F en est déduit. */
+const NOTES = { colon:{ pre:'1:', suf:'', key:'noteColon' }, pow:{ pre:'10^-', suf:'', key:'notePow' }, pct:{ pre:'', suf:'%', key:'notePct' }, dec:{ pre:'', suf:'', key:'noteDec' } };
+const note = () => NOTES[data.dilNote] || NOTES.colon;
+function parseFactor(str){ // facteur de dilution F (dilué F fois) ; 0 si illisible
+  const v = String(str || '').trim().replace(',', '.').replace(/\s+/g, ''); let m;
+  if (!v) return 0;
+  if ((m = v.match(/^1[:/](\d*\.?\d+)$/))) return +m[1];
+  if ((m = v.match(/^10\^?-(\d*\.?\d+)$/))) return 10 ** +m[1];
+  if ((m = v.match(/^(\d*\.?\d+)e-(\d+)$/i))) return 1 / (+m[1] * 10 ** -+m[2]);
+  if ((m = v.match(/^(\d*\.?\d+)%$/))) return +m[1] > 0 ? 100 / +m[1] : 0;
+  if ((m = v.match(/^-(\d*\.?\d+)$/))) return 10 ** +m[1];
+  if ((m = v.match(/^(\d*\.?\d+)$/))) { const d = +m[1]; return d <= 0 ? 0 : d < 1 ? 1 / d : d; }
+  return 0;
+}
+const dilFromInput = x => { x = x.trim(); if (!x) return ''; if (/[:^%e\/]/i.test(x) || x.startsWith('-')) return x; const n = note(); return n.pre + x + n.suf; };
+const dilToInput = d => { const n = note(); d = d || ''; return d.startsWith(n.pre) && d.endsWith(n.suf) && d.length >= n.pre.length + n.suf.length ? d.slice(n.pre.length, d.length - n.suf.length || undefined) : d; };
+function renderDil(){
+  const n = note(), t0 = tgt();
+  $('dilPre').textContent = n.pre; $('dilSuf').textContent = n.suf;
+  if (document.activeElement !== $('inDil')) $('inDil').value = t0 ? dilToInput(t0.dilution) : '';
+  if (document.activeElement !== $('inVol')) $('inVol').value = t0 ? (t0.vol == null ? '' : t0.vol) : '';
+  $('inDil').placeholder = n.pre === '1:' ? '10' : n.pre ? '1' : n.suf ? '10' : '0.1';
+}
+$('inDil').addEventListener('input', e => { const t0 = tgt(); if (!t0) return; t0.dilution = C[cur()].dilution = dilFromInput(e.target.value); changed(); });
+$('inVol').addEventListener('input', e => { const t0 = tgt(); if (!t0) return; t0.vol = C[cur()].vol = e.target.value.trim(); changed(); });
+$('btnSetDil').addEventListener('click', () => {
+  const box = $('dilNotes'); box.innerHTML = '';
+  Object.keys(NOTES).forEach(k => { const l = document.createElement('label'); l.className = 'choice';
+    const i = document.createElement('input'); i.type = 'radio'; i.name = 'dilnote'; i.value = k; i.checked = (data.dilNote || 'colon') === k;
+    l.append(i, document.createTextNode(t(NOTES[k].key))); box.appendChild(l); });
+  $('dilDlg').showModal();
+});
+$('dilCancel').addEventListener('click', () => $('dilDlg').close());
+$('dilOk').addEventListener('click', () => { const c = document.querySelector('input[name=dilnote]:checked'); if (c) data.dilNote = c.value; $('dilDlg').close(); changed(); $('inDil').focus(); });
+// dilution et volume de la boîte en cours, appliqués à toutes les boîtes du dossier (annulable avec ↶)
+$('btnDilAll').addEventListener('click', async () => {
+  const t0 = tgt(); if (!t0) return;
+  const d = t0.dilution || '', v = t0.vol || '';
+  if (!(await ask(t('dilAllQ', { d, v }), t('dilAllD', { n:files.length }), t('apply'), t('cancel')))) return;
+  const before = {}, created = files.filter(f => !data.images[f.name]).map(f => f.name);
+  for (const k in data.images){ const r = data.images[k]; before[k] = { d:r.dilution, v:r.vol, p2:r.p2 ? { d:r.p2.dilution, v:r.p2.vol } : null }; }
+  apply({ op:'dilAll', d, v, before, created });
+});
+const STATUS = [['', 'stCounted'], ['zero', 'stZero'], ['nc', 'stNC'], ['ignored', 'stIgnored']];
+function renderStatus(){
+  const box = $('statusChips'), t0 = tgt(); box.innerHTML = '';
+  STATUS.forEach(([k, key]) => {
+    const c = document.createElement('span'); c.className = 'chip'; c.setAttribute('aria-pressed', String(!!t0 && (t0.status || '') === k));
+    const b = document.createElement('button'); b.type = 'button'; b.disabled = !t0;
+    const tick = document.createElement('span'); tick.className = 'tick'; tick.setAttribute('aria-hidden', 'true'); b.append(tick, document.createTextNode(t(key)));
+    b.addEventListener('click', () => { const t1 = tgt(); if (!t1) return; t1.status = k; changed(); }); // propre à chaque boîte (pas reporté)
+    c.appendChild(b); box.appendChild(c);
+  });
+}
 
 /* ---------- Mode 2 boîtes : interface ---------- */
 function circlesSVG(s){
@@ -883,8 +997,8 @@ async function copyGraph(){
 }
 $('btnCopyGraph').addEventListener('click', copyGraph);
 function groupStats(){
-  const by = new Map();
-  samples().filter(counted).forEach(sm => { const g = sm.fields.group || ''; if (!by.has(g)) by.set(g, []); by.get(g).push(sm.count); });
+  const by = new Map(); // moyenne par groupe des CFU/sample de ses samples
+  sampleStats().forEach(sp => { if (!by.has(sp.g)) by.set(sp.g, []); by.get(sp.g).push(sp.m); });
   const order = [...data.groups.filter(g => by.has(g)), ...[...by.keys()].filter(g => g && !data.groups.includes(g)), ...(by.has('') ? [''] : [])];
   return order.map(g => { const v = by.get(g), m = v.reduce((a, b) => a + b, 0) / v.length;
     const sd = v.length > 1 ? Math.sqrt(v.reduce((a, b) => a + (b - m)**2, 0) / (v.length - 1)) : 0;
@@ -914,13 +1028,13 @@ function renderGraph(o){
   // grille discrète : 4 graduations, pointillés
   for (let i = 0; i <= nt; i++){ const v = step * i, yy = y(v);
     if (i) out += '<line x1="' + L + '" x2="' + (W - R) + '" y1="' + yy + '" y2="' + yy + '" stroke="#1A1A1A" stroke-opacity=".18" stroke-dasharray="3 4"/>';
-    out += '<text x="' + (L - 6) + '" y="' + (yy + 4) + '" text-anchor="end" font-size="11" fill="#5E5546" ' + font + '>' + (Math.round(v*10)/10) + '</text>'; }
+    out += '<text x="' + (L - 6) + '" y="' + (yy + 4) + '" text-anchor="end" font-size="11" fill="#5E5546" ' + font + '>' + fmtC(v) + '</text>'; }
   stats.forEach((s, i) => {
     const cx = L + slot*(i + .5), x = cx - bw/2, top = y(s.m), h = T + ph - top;
     // barre pixel : ombre décalée, remplissage jaune, contour noir
     if (h > 0) out += '<rect x="' + (x + 3) + '" y="' + (top + 3) + '" width="' + bw + '" height="' + Math.max(0, h - 3) + '" fill="#1A1A1A" opacity=".25"/>' +
       '<rect x="' + x + '" y="' + top + '" width="' + bw + '" height="' + h + '" fill="' + (s.g ? '#F2C14E' : '#D8CDB4') + '" stroke="#1A1A1A" stroke-width="2.5"/>';
-    out += '<text x="' + cx + '" y="' + (top - 6) + '" text-anchor="middle" font-size="12" font-weight="700" fill="#1A1A1A" ' + font + '>' + (Math.round(s.m*10)/10) + '</text>';
+    out += '<text x="' + cx + '" y="' + (top - 6) + '" text-anchor="middle" font-size="12" font-weight="700" fill="#1A1A1A" ' + font + '>' + fmtC(s.m) + '</text>';
     if (tilt) out += '<text x="' + (cx + 4) + '" y="' + (T + ph + 13) + '" text-anchor="end" transform="rotate(-35 ' + (cx + 4) + ' ' + (T + ph + 13) + ')" font-size="11" fill="#1A1A1A" ' + font + '>' + esc(cut(s.label)) + '</text>';
     else out += '<text x="' + cx + '" y="' + (T + ph + 15) + '" text-anchor="middle" font-size="11" fill="#1A1A1A" ' + font + '>' + esc(s.label) + '</text>' +
       '<text x="' + cx + '" y="' + (T + ph + 28) + '" text-anchor="middle" font-size="10" fill="#5E5546" ' + font + '>n=' + s.n + '</text>'; // en diagonale, n est dans la bulle
@@ -928,31 +1042,32 @@ function renderGraph(o){
     out += '<rect class="hit" data-i="' + i + '" x="' + (cx - slot/2) + '" y="' + T + '" width="' + slot + '" height="' + (ph + B) + '" fill="transparent"/>';
   });
   out += '<line x1="' + L + '" x2="' + (W - R) + '" y1="' + (T + ph) + '" y2="' + (T + ph) + '" stroke="#1A1A1A" stroke-width="3"/>';
-  out += '<text x="' + L + '" y="12" font-size="11" fill="#5E5546" ' + font + '>CFU</text>';
+  out += '<text x="' + L + '" y="12" font-size="11" fill="#5E5546" ' + font + '>CFU/sample</text>';
   svg.innerHTML = out;
   if (!live) return true;
   svg.querySelectorAll('.hit').forEach(h => {
     h.addEventListener('pointerenter', () => { const s = stats[+h.dataset.i], tip = $('chartTip');
-      tip.textContent = t('graphTip', { g:s.label, m:Math.round(s.m*10)/10, sd:Math.round(s.sd*10)/10, n:s.n }); tip.hidden = false;
+      tip.textContent = t('graphTip', { g:s.label, m:fmtC(s.m), sd:fmtC(s.sd), n:s.n }); tip.hidden = false;
       const cx = L + slot*(+h.dataset.i + .5); tip.style.left = Math.max(4, Math.min(W - tip.offsetWidth - 4, cx - tip.offsetWidth/2)) + 'px'; tip.style.top = Math.max(2, y(s.m) - 46) + 'px'; });
     h.addEventListener('pointerleave', () => { $('chartTip').hidden = true; });
   });
 }
 
+const shownCount = (fl, n) => ({ zero:'0', nc:'NC', ignored:'–' })[fl.status || ''] || n; // compte affiché selon le statut
 function renderTable(){
   const tb = $('rows'); if (!tb) return;
   tb.innerHTML = '';
   files.forEach((f, i) => {
     const r = data.images[f.name], open = r && !r.pending;
-    const row = (label, grey, count, pi) => {
+    const row = (label, grey, count, pi, ign) => {
       const tr = document.createElement('tr'), td1 = document.createElement('td'), td2 = document.createElement('td');
-      tr.className = 'row' + (i === idx && (pi == null || pi === cur()) ? ' cur' : '');
+      tr.className = 'row' + (i === idx && (pi == null || pi === cur()) ? ' cur' : '') + (ign ? ' ign' : '');
       td1.textContent = label; if (grey) td1.className = 'unnamed'; td2.className = 'n'; td2.textContent = count;
       tr.append(td1, td2); tr.addEventListener('click', () => { if (pi != null) plate = pi; if (i === idx){ syncInputs(); renderAll(); } else show(i); }); tb.appendChild(tr);
     };
     if (!open) row(r && r.pending && (r.prefix || '').trim() ? r.prefix.trim() + S.sep + stem(f.name) : stem(f.name), true, '–', null); // pas encore ouverte : en gris
-    else if (dbl()) [0, 1].forEach(pi => { const fl = fieldsOf(r, pi), n = finalName(fl); row(n || stem(f.name) + ' (' + (pi + 1) + ')', !n, countOf(r, pi), pi); }); // une ligne par boîte
-    else { const n = finalName(r); row(n || stem(f.name), !n, r.marks.length, null); }
+    else if (dbl()) [0, 1].forEach(pi => { const fl = fieldsOf(r, pi), n = finalName(fl); row(n || stem(f.name) + ' (' + (pi + 1) + ')', !n, shownCount(fl, countOf(r, pi)), pi, fl.status === 'ignored'); }); // une ligne par boîte
+    else { const n = finalName(r); row(n || stem(f.name), !n, shownCount(r, r.marks.length), null, r.status === 'ignored'); }
   });
 }
 function renderAll(){
@@ -973,8 +1088,12 @@ function renderAll(){
 /* ---------- Export ---------- */
 function csvText(){
   const sep = S.csvSep, q = v => (v.includes(sep) || /["\n]/.test(v)) ? '"' + v.replace(/"/g, '""') + '"' : v;
-  const lines = [[t('colName'), 'CFU', 'Dilution', 'Image'].concat(dbl() ? ['Plate'] : []).join(sep)];
-  samples().forEach(sm => lines.push([q(sampleName(sm)), sm.count, q(sm.fields.dilution || ''), q(sm.f.name)].concat(dbl() ? [sm.plate + 1] : []).join(sep))); // une ligne par boîte
+  // une ligne par boîte (boîtes ignorées exclues) ; CFU/sample = N × F / V (V en mL)
+  const num = v => S.csvSep === ';' ? String(v).replace('.', ',') : String(v);
+  const lines = [[t('colName'), 'Sample', 'Group', 'CFU', 'Status', 'Dilution', 'Dilution factor', 'Volume (µL)', 'CFU/sample', 'Image'].concat(dbl() ? ['Plate'] : []).join(sep)];
+  plateRows().forEach(pr => lines.push([q(sampleName(pr)), q(sampleLabel(pr)), q(pr.fields.group || ''), pr.status === 'nc' ? 'NC' : pr.n,
+    ({ '':'counted', zero:'0 growth', nc:'NC' })[pr.status], q(pr.fields.dilution || ''), pr.F ? num(pr.F) : '', q(String(pr.fields.vol || '')),
+    pr.C == null ? '' : num(pr.C), q(pr.f.name)].concat(dbl() ? [pr.plate + 1] : []).join(sep)));
   return '\ufeff' + lines.join('\r\n') + '\r\n'; // BOM : les accents s'affichent correctement dans Excel
 }
 const csvName = () => 'comptage_' + folder.replace(/[^\w.-]+/g, '_') + '.csv';
@@ -1023,7 +1142,7 @@ async function reportImage(f, r){ // mode 2 boîtes : les cercles et le nom de c
       x.beginPath(); x.arc(mx*w, my*h, rad, 0, 2*Math.PI); x.lineWidth = lw*2.4; x.strokeStyle = '#000'; x.stroke();
       x.beginPath(); x.arc(mx*w, my*h, rad, 0, 2*Math.PI); x.lineWidth = lw; x.strokeStyle = S.color; x.stroke();
     });
-    if (dbl()) circles().forEach((c, i) => {
+    if (dbl()) circles().forEach((c, i) => { if ((fieldsOf(r, i).status || '') === 'ignored') return;
       const cx = c.x*w, cy = c.y*h, rr = c.r*w, fs = Math.round(w*.03), fs2 = Math.round(w*.016), lx = cx - rr*.72, ly = cy - rr*.72;
       x.setLineDash([w*.012, w*.008]); x.lineWidth = w*.004; x.strokeStyle = '#fff'; x.beginPath(); x.arc(cx, cy, rr, 0, 2*Math.PI); x.stroke(); x.setLineDash([]);
       x.textAlign = 'center'; x.lineJoin = 'round'; x.font = 'bold ' + fs + 'px Helvetica, Arial, sans-serif';
@@ -1037,27 +1156,26 @@ async function reportImage(f, r){ // mode 2 boîtes : les cercles et le nom de c
 // statistiques par groupe pour le rapport (mêmes images que l'onglet Graph)
 function groupTable(){
   return groupStats().map(s => {
-    const v = samples().filter(sm => counted(sm) && (sm.fields.group || '') === s.g).map(sm => sm.count).sort((a, b) => a - b);
+    const v = sampleStats().filter(sp => sp.g === s.g).map(sp => sp.m).sort((a, b) => a - b);
     const mid = v.length / 2, median = v.length % 2 ? v[Math.floor(mid)] : (v[mid - 1] + v[mid]) / 2;
     return Object.assign({}, s, { median, min:v[0], max:v[v.length - 1] });
   });
 }
-// page de synthèse, sobre : barres = moyenne, barres d'erreur = écart-type, puis tableau des statistiques
-function summaryPage(doc, header, { PW, PH, M, CW }){
+// Pages de synthèse, sobres : barres = moyenne (CFU/sample), barres d'erreur = écart-type, puis un tableau.
+// C = N × F / V pour chaque boîte (N colonies, F facteur de dilution, V volume en mL) ; boîtes à 0, NC ou ignorées exclues.
+function barPage(doc, header, { PW, PH, M, CW }, title, rows, caption, cols, rowVals){
   doc.addPage(); header();
-  const rows = groupTable(), f1 = v => (Math.round(v * 10) / 10).toFixed(1);
-  doc.setFont('helvetica', 'bold'); doc.setFontSize(12); doc.setTextColor(0); doc.text('Colony counts per group', M, 30);
-  if (!rows.length){ doc.setFont('helvetica', 'normal'); doc.setFontSize(10); doc.setTextColor(90); doc.text('No counted image has been assigned to a group.', M, 40); return; }
-  // zone du graphique
-  const gx = M + 14, gy = 38, gw = CW - 16, gh = 95, top0 = Math.max(...rows.map(r => r.m + r.sd)) * 1.08 || 1;
+  doc.setFont('helvetica', 'bold'); doc.setFontSize(12); doc.setTextColor(0); doc.text(title, M, 30);
+  if (!rows.length){ doc.setFont('helvetica', 'normal'); doc.setFontSize(10); doc.setTextColor(90); doc.text('No plate has a count, a dilution and a volume yet.', M, 40); return; }
+  const gx = M + 18, gy = 38, gw = CW - 20, gh = 90, top0 = Math.max(...rows.map(r => r.m + r.sd)) * 1.08 || 1;
   const raw = top0 / 5, p10 = 10 ** Math.floor(Math.log10(raw)), step = [1, 2, 2.5, 5, 10].map(k => k * p10).find(v => v >= raw), nt = Math.ceil(top0 / step), max = step * nt;
   const y = v => gy + gh - v / max * gh;
   doc.setFont('helvetica', 'normal'); doc.setFontSize(8); doc.setTextColor(60); doc.setLineWidth(.15);
   for (let i = 0; i <= nt; i++){ const v = step * i, yy = y(v);
     doc.setDrawColor(i ? 225 : 0); if (i) doc.line(gx, yy, gx + gw, yy);
-    doc.text(String(Math.round(v * 100) / 100), gx - 2, yy + 1, { align:'right' }); }
+    doc.text(fmtC(v), gx - 2, yy + 1, { align:'right' }); }
   doc.setDrawColor(0); doc.setLineWidth(.3); doc.line(gx, gy, gx, gy + gh); doc.line(gx, gy + gh, gx + gw, gy + gh);
-  doc.text('CFU', gx - 10, gy - 4);
+  doc.text('CFU/sample', gx - 14, gy - 4);
   const slot = gw / rows.length, bw = Math.min(22, slot * .55), tilt = rows.some(r => doc.getTextWidth(r.label) > slot - 2);
   rows.forEach((r, i) => {
     const cx = gx + slot * (i + .5), bt = y(r.m);
@@ -1065,31 +1183,43 @@ function summaryPage(doc, header, { PW, PH, M, CW }){
     if (r.m > 0) doc.rect(cx - bw/2, bt, bw, gy + gh - bt, 'FD');
     if (r.n > 1 && r.sd > 0){ const e1 = y(r.m + r.sd), e0 = y(Math.max(0, r.m - r.sd)); doc.setLineWidth(.3);
       doc.line(cx, e0, cx, e1); doc.line(cx - bw/5, e1, cx + bw/5, e1); doc.line(cx - bw/5, e0, cx + bw/5, e0); }
-    doc.setTextColor(0); doc.setFontSize(8);
-    if (tilt) doc.text(r.label, cx + 1.5, gy + gh + 4, { angle:35, align:'right' });
-    else doc.text(r.label, cx, gy + gh + 5, { align:'center' });
+    doc.setTextColor(0); doc.setFontSize(rows.length > 12 ? 6.5 : 8);
+    const lab = r.label.length > 28 ? r.label.slice(0, 27) + '…' : r.label;
+    if (tilt) doc.text(lab, cx + 1.5, gy + gh + 4, { angle:35, align:'right' }); else doc.text(lab, cx, gy + gh + 5, { align:'center' });
   });
-  let ty = gy + gh + (tilt ? 30 : 12);
-  doc.setFontSize(8); doc.setTextColor(90); doc.text('Bars: mean count per group. Error bars: standard deviation (groups with n > 1). Only counted or named images are included.', M, ty); ty += 7;
-  // tableau des statistiques
-  const cols = [['Group', 60], ['n', 15], ['Mean', 22], ['SD', 22], ['Median', 22], ['Min', 19.5], ['Max', 19.5]], rh = 7;
+  let ty = gy + gh + (tilt ? 38 : 12);
+  doc.setFontSize(8); doc.setTextColor(90); doc.splitTextToSize(caption, CW).forEach(l => { doc.text(l, M, ty); ty += 4; }); ty += 3;
+  const rh = 7, total = cols.reduce((a, c) => a + c[1], 0), sc = CW / total, cw = cols.map(c => c[1] * sc);
   const row = (vals, head) => {
     let x = M; if (head){ doc.setFillColor(235, 235, 235); doc.rect(M, ty, CW, rh, 'F'); }
-    doc.setFont('helvetica', head ? 'bold' : 'normal'); doc.setFontSize(9.5); doc.setTextColor(0);
-    vals.forEach((v, i) => { const [, w] = cols[i];
-      if (i === 0) doc.text(doc.splitTextToSize(String(v), w - 4)[0], x + 2, ty + 4.8); else doc.text(String(v), x + w - 2, ty + 4.8, { align:'right' });
+    doc.setFont('helvetica', head ? 'bold' : 'normal'); doc.setFontSize(8.5); doc.setTextColor(0);
+    vals.forEach((v, i) => { const w = cw[i];
+      if (cols[i][2] === 'l') doc.text(doc.splitTextToSize(String(v), w - 3)[0], x + 1.5, ty + 4.8); else doc.text(doc.splitTextToSize(String(v), w - 3)[0], x + w - 1.5, ty + 4.8, { align:'right' });
       x += w; });
     doc.setDrawColor(0); doc.setLineWidth(.25); doc.rect(M, ty, CW, rh);
-    let lx = M; cols.slice(0, -1).forEach(([, w]) => { lx += w; doc.line(lx, ty, lx, ty + rh); });
+    let lx = M; cw.slice(0, -1).forEach(w => { lx += w; doc.line(lx, ty, lx, ty + rh); });
     ty += rh;
   };
   row(cols.map(c => c[0]), true);
-  rows.forEach(r => { if (ty > PH - 20){ doc.addPage(); header(); ty = 28; row(cols.map(c => c[0]), true); }
-    row([r.label, r.n, f1(r.m), r.n > 1 ? f1(r.sd) : '–', f1(r.median), r.min, r.max]); });
+  rows.forEach(r => { if (ty > PH - 20){ doc.addPage(); header(); ty = 28; row(cols.map(c => c[0]), true); } row(rowVals(r)); });
+}
+function summaryPage(doc, header, geo){
+  const formula = 'C = (N × F) / V for each plate: N = colonies counted, F = dilution factor, V = volume plated (mL). Plates marked 0 growth or NC, or without dilution or volume, are excluded.';
+  barPage(doc, header, geo, 'CFU/sample per group', groupTable(),
+    'Bars: mean CFU/sample of the samples in each group. Error bars: standard deviation between samples (n > 1). ' + formula,
+    [['Group', 46, 'l'], ['Samples', 16], ['Mean', 24], ['SD', 22], ['Median', 24], ['Min', 22], ['Max', 22]],
+    r => [r.label, r.n, fmtC(r.m), r.n > 1 ? fmtC(r.sd) : '–', fmtC(r.median), fmtC(r.min), fmtC(r.max)]);
+  const sp = sampleStats().map(s => Object.assign(s, { n:s.plates.length }));
+  barPage(doc, header, geo, 'CFU/sample per sample', sp,
+    'Bars: mean CFU/sample over the plates (dilutions) of each sample. Error bars: standard deviation between plates (n > 1). ' + formula,
+    [['Sample', 50, 'l'], ['Group', 26, 'l'], ['Plates', 13], ['Dilutions', 34, 'l'], ['Volumes (µL)', 22, 'l'], ['Mean', 22], ['SD', 19]],
+    r => [r.label, r.g || '–', r.n, r.dils.join(', '), r.vols.join(', '), fmtC(r.m), r.n > 1 ? fmtC(r.sd) : '–']);
 }
 async function buildReport(exp, desc, withGraph){
   const { jsPDF } = window.jspdf, doc = new jsPDF({ unit:'mm', format:'a4', orientation:'portrait' });
-  const PW = 210, PH = 297, M = 15, CW = PW - 2*M, items = files.filter(f => data.images[f.name] && !data.images[f.name].pending);
+  const PW = 210, PH = 297, M = 15, CW = PW - 2*M; // images poubelles (« Ignore ») absentes du rapport
+  const keep = (r, i) => ((i ? p2Of(r) : r).status || '') !== 'ignored';
+  const items = files.filter(f => { const r = data.images[f.name]; return r && !r.pending && (dbl() ? keep(r, 0) || keep(r, 1) : keep(r, 0)); });
   const date = new Date().toLocaleDateString('en-GB', { year:'numeric', month:'long', day:'numeric' });
   const header = () => {
     doc.setFont('helvetica', 'bold'); doc.setFontSize(11); doc.setTextColor(0);
@@ -1111,16 +1241,20 @@ async function buildReport(exp, desc, withGraph){
     y += ih + 4;
     doc.setFont('helvetica', 'normal'); doc.setFontSize(8); doc.setTextColor(110);
     doc.text('Image: ' + f.name, M, y);
-    if (!dbl() && (r.dilution || '').trim()) doc.text('Dilution: ' + r.dilution.trim(), PW - M, y, { align:'right' }); // même style que le nom de l'image, à droite
     y += 2;
-    // tableau : en-têtes, puis une ligne par boîte (nom et nombre de colonies)
-    const c1 = CW - 35, rh = 7, lines = dbl() ? [0, 1].map(i => [(i + 1) + '. ' + (finalName(fieldsOf(r, i)) || stem(f.name) + ' (' + (i + 1) + ')'), countOf(r, i)]) : [[finalName(r) || stem(f.name), r.marks.length]];
+    // tableau : en-têtes, puis une ligne par boîte (nom, dilution, volume, colonies)
+    const rh = 7, wC = 24, wV = 26, wD = 30, c1 = CW - wC - wV - wD;
+    const lines = (dbl() ? [0, 1] : [0]).filter(i => keep(r, i)).map(i => { const fl = fieldsOf(r, i), n = dbl() ? countOf(r, i) : r.marks.length;
+      return [(dbl() ? (i + 1) + '. ' : '') + (finalName(fl) || stem(f.name) + (dbl() ? ' (' + (i + 1) + ')' : '')), fl.dilution || '–', fl.vol ? fl.vol + ' µL' : '–',
+        fl.status === 'zero' ? '0' : fl.status === 'nc' ? 'NC' : String(n)]; });
     doc.setDrawColor(0); doc.setLineWidth(.25); doc.setFillColor(235, 235, 235);
-    doc.rect(M, y, CW, rh, 'FD'); lines.forEach((_, k) => doc.rect(M, y + rh*(k + 1), CW, rh)); doc.line(M + c1, y, M + c1, y + rh*(lines.length + 1));
+    doc.rect(M, y, CW, rh, 'FD'); lines.forEach((_, k) => doc.rect(M, y + rh*(k + 1), CW, rh));
+    [c1, c1 + wD, c1 + wD + wV].forEach(xx => doc.line(M + xx, y, M + xx, y + rh*(lines.length + 1)));
     doc.setTextColor(0); doc.setFontSize(10); doc.setFont('helvetica', 'bold');
-    doc.text('Name', M + 2, y + 4.8); doc.text('CFU', M + CW - 2, y + 4.8, { align:'right' });
+    doc.text('Name', M + 2, y + 4.8); doc.text('Dilution', M + c1 + wD - 2, y + 4.8, { align:'right' }); doc.text('Volume', M + c1 + wD + wV - 2, y + 4.8, { align:'right' }); doc.text('CFU', M + CW - 2, y + 4.8, { align:'right' });
     doc.setFont('helvetica', 'normal');
-    lines.forEach(([nm, n], k) => { doc.text(doc.splitTextToSize(nm, c1 - 4)[0], M + 2, y + rh*(k + 1) + 4.8); doc.text(String(n), M + CW - 2, y + rh*(k + 1) + 4.8, { align:'right' }); });
+    lines.forEach(([nm, d, v, n], k) => { const yy = y + rh*(k + 1) + 4.8;
+      doc.text(doc.splitTextToSize(nm, c1 - 4)[0], M + 2, yy); doc.text(d, M + c1 + wD - 2, yy, { align:'right' }); doc.text(v, M + c1 + wD + wV - 2, yy, { align:'right' }); doc.text(n, M + CW - 2, yy, { align:'right' }); });
     y += rh*(lines.length + 1) + 10;
   }
   if (withGraph) summaryPage(doc, header, { PW, PH, M, CW });

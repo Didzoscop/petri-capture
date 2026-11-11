@@ -458,13 +458,13 @@ body.manual .meters,body.manual .btn.lens{display:none}
 
 <div class="toast" id="toast" role="status"></div>
 
-<script src="mascot.js?v40"></script> <!-- ?vNN : à changer avec APP_VERSION, pour contourner le cache de GitHub Pages -->
-<script src="demo.js?v40"></script>
+<script src="mascot.js?v41"></script> <!-- ?vNN : à changer avec APP_VERSION, pour contourner le cache de GitHub Pages -->
+<script src="demo.js?v41"></script>
 <script>
 (() => {
 'use strict';
 const $ = id => document.getElementById(id);
-const APP_VERSION = 'v40 · 06/11'; // à incrémenter à chaque publication
+const APP_VERSION = 'v41 · 11/11'; // à incrémenter à chaque publication
 $('ver').textContent = APP_VERSION;
 
 /* ---------- Mascotte (dessin et animation dans mascot.js) ---------- */
@@ -566,7 +566,7 @@ let state = 'idle'; // idle | empty | settling | focusing | saving | wait_remova
 let tSince = 0, tFocus = 0, tEmptySince = 0, bestSharp = 0, lastMsg = null;
 let ref = null, prevL = null, refPending = false, tHeal = 0, motionAvg = 0;
 let focusLocked = false, lockSharp = 0, verifyN = 0, verifyMax = 0, lockVerify = false, refreshRef = false, focusDur = 0;
-let snap = null, tSwap = 0;
+let snap = null, tSwap = 0, tShot = 0; // tShot : heure de la dernière photo (1,5 s sans détection ensuite)
 let tRetry = 0, failStreak = 0; // nouvel essai automatique après un échec // image de la boîte photographiée, pour repérer son remplacement
 let aw = 160, ah = 90, idxDish = null, idxLid = null, idxOut = null;
 const acv = document.createElement('canvas'), actx = acv.getContext('2d', { willReadFrequently:true });
@@ -1474,15 +1474,23 @@ function loop(){
           else toast(t('lockOk'));
         }
       }
-      if (a.fDish < P*.5){ if (!tEmptySince) tEmptySince = now; if (now - tEmptySince > 400){ snap = null; toEmpty(); } break; }
-      tEmptySince = 0;
-      if (!snap){ if (motionAvg < MOTION_T){ snap = dishPixels(a.d); tSwap = 0; } break; }
-      // boîte remplacée sans passer par un socle vide : la zone a beaucoup changé par rapport à la photo précédente
-      // (seuil élevé : une boîte tenue à la main bouge un peu sans être une nouvelle boîte)
-      if (changedFrac(a.d, snap) > Math.max(P, .6) && motionAvg < MOTION_T){
+      // Après une photo, on suppose que la boîte est retirée : rien n'est cherché pendant 1,5 s.
+      // On en profite pour mémoriser l'image de la boîte photographiée (tant qu'elle est encore là).
+      if (!snap && a.fDish >= P*.5 && motionAvg < MOTION_T && now - tShot < 1500) snap = dishPixels(a.d);
+      if (now - tShot < 1500) break;
+      if (a.fDish < P*.5){ snap = null; toEmpty(); break; } // socle vide : prêt tout de suite
+      if (!snap){ snap = dishPixels(a.d); tSwap = 0; break; }
+      // une boîte est là : nouvelle si la zone a changé (plus de 35 %) par rapport à la boîte photographiée, sinon c'est la même
+      if (changedFrac(a.d, snap) > Math.max(P, .35) && motionAvg < MOTION_T){
         if (!tSwap) tSwap = now;
-        if (now - tSwap > 400){ snap = null; state = 'settling'; tSince = now; sounds.tick(); drawOverlay();
-          setStatus('busy', T('newDish'), T('holdStill'), runActions()); }
+        if (now - tSwap > 300){
+          tSwap = 0;
+          // garde : marqueurs du socle lisibles = pas de boîte en réalité (fond faussé) → pas de photo, fond repris
+          let empty = false; try{ empty = SOCLE_IDS.dish.filter(id => quickMarkers()[id]).length >= 3; }catch(e){}
+          if (empty){ snap = null; takeReference(true).then(() => { toEmpty(); toast(t('bgAuto')); }); break; }
+          snap = null; state = 'settling'; tSince = now; sounds.tick(); drawOverlay();
+          setStatus('busy', T('newDish'), T('holdStill'), runActions());
+        }
       } else tSwap = 0;
       break; }
   }
@@ -1578,7 +1586,7 @@ async function save(){
     await photoPut({ id, name, blob, w:bestCv.width, h:bestCv.height, sharp:bestSharp, exported:false });
     sharpHistory.push(bestSharp); if (sharpHistory.length > 15) sharpHistory.shift(); store.set('petri.sharp', sharpHistory);
     const total = await photoCount(); $('countBadge').textContent = total;
-    state = 'wait_removal'; tEmptySince = 0; snap = null; lastMsg = { ok:true }; failStreak = 0; afterShot(true);
+    state = 'wait_removal'; tEmptySince = 0; snap = null; tShot = performance.now(); lastMsg = { ok:true }; failStreak = 0; afterShot(true);
     sounds.ok(); flash('#1E9E5E'); drawOverlay();
     setStatus('ok', T('saved'), T('savedSmall', { n:total }), runActions());
   }catch(e){
