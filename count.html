@@ -96,6 +96,7 @@ input[type=text]:focus{outline:none;background:#fff}
 .counter .num span{display:block;margin-top:-.35em;font-size:clamp(1.5rem,3.2vh,2.1rem);font-weight:700;letter-spacing:.06em;color:#A39A88} /* « CFU » sous le compte, grand, gris clair */
 .counter{padding:.35rem .6rem}
 .counter .btn{width:40px;min-height:36px;padding:0;font-size:1.2rem}
+.counter .btn.clear svg{width:16px;height:18px;shape-rendering:crispEdges}
 .lbl{display:block;font-size:1.3rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;margin:.6rem 0 .3rem}
 .lbl:first-child{margin-top:0}
 .inline{display:flex;gap:.45rem;align-items:center}
@@ -167,6 +168,10 @@ tr.cur.ign td{color:#8C8370}
 .graph .tip{position:absolute;pointer-events:none;background:var(--ink);color:var(--paper);padding:.25rem .5rem;font-size:.85rem;white-space:nowrap;box-shadow:2px 2px 0 var(--muted);z-index:2}
 .gempty{position:absolute;inset:0;display:grid;place-items:center;text-align:center;padding:1rem;margin:0;color:var(--muted);font-size:.95rem}
 .table .scroll{flex:1;min-height:0;overflow:auto}
+/* masquer les images ignorées : case discrète sous la liste */
+.hideign{display:flex;align-items:center;gap:.45rem;padding:.3rem .6rem;border-top:2px solid var(--ink);font-size:.85rem;color:var(--muted);cursor:pointer;flex:none}
+.hideign input[type=checkbox]{width:18px;height:18px;margin:0 2px 2px 0;box-shadow:2px 2px 0 var(--ink);border-width:2px}
+.hideign input[type=checkbox]:checked{background-size:10px 9px}
 table{width:100%;border-collapse:collapse;font-size:1.02rem}
 th,td{padding:.32rem .55rem;border-bottom:1px solid rgba(26,26,26,.25);text-align:left;vertical-align:top}
 th{position:sticky;top:0;background:var(--paper);border-bottom:2px solid var(--ink);font-size:1.12rem;text-transform:uppercase;letter-spacing:.05em}
@@ -284,6 +289,7 @@ dialog.pix .row{display:flex;justify-content:flex-end;margin-top:1rem;padding:0 
     <button class="btn" id="btnUndo" type="button" data-i18n-aria="undo" disabled>↶</button>
     <div class="num"><b id="count">0</b><span>CFU</span></div>
     <button class="btn" id="btnRedo" type="button" data-i18n-aria="redo" disabled>↷</button>
+    <button class="btn clear" id="btnClear" type="button" data-i18n-aria="clearMarks" disabled></button>
   </div>
   <div class="card naming">
     <div class="chips plates" id="plateSel" hidden></div>
@@ -315,6 +321,7 @@ dialog.pix .row{display:flex;justify-content:flex-end;margin-top:1rem;padding:0 
       <span class="saved" id="saved"></span>
     </div>
     <div class="scroll" id="paneRes" role="tabpanel"><table><thead><tr><th data-i18n="colName"></th><th class="n">CFU</th></tr></thead><tbody id="rows"></tbody></table></div>
+    <label class="hideign" id="hideIgnBox"><input type="checkbox" id="cHideIgn"> <span id="hideIgnLbl"></span></label>
     <div class="graph" id="paneGraph" role="tabpanel" hidden><button type="button" class="copygraph" id="btnCopyGraph" data-i18n-aria="copyGraph"></button><svg id="chart" xmlns="http://www.w3.org/2000/svg"></svg><div class="tip" id="chartTip" hidden></div><p class="gempty" id="chartEmpty" hidden></p></div>
   </div>
 </aside>
@@ -375,7 +382,7 @@ dialog.pix .row{display:flex;justify-content:flex-end;margin-top:1rem;padding:0 
 (() => {
 'use strict';
 const $ = id => document.getElementById(id);
-const VERSION = 'v26 · 12/11';
+const VERSION = 'v28 · 13/11';
 const SAVE_FILE = 'petri-comptage.json';
 const IMG_RE = /\.(jpe?g|png|webp|gif|bmp|avif)$/i;
 const canWriteFolder = typeof window.showDirectoryPicker === 'function'; // Chrome, Edge : lecture et écriture dans le dossier
@@ -410,7 +417,7 @@ const I18N = {
     saveErr:'Save failed', csvDone: p => 'Table saved: ' + p.f,
     loaded: p => p.n + ' images, save restored.', found: p => p.n + ' images found.', permDenied:'Folder access denied.',
     csvHere:'In the image folder', csvElse:'Choose another location…', settings:'Settings', close:'Close',
-    exportBtn:'Export', mCsv:'Table (.csv)', mXlsx:'Excel (.xlsx)', xlsxNoLib:'The Excel module could not load (offline?).', mPdf:'Report (.pdf)', newGroup:'New group',
+    exportBtn:'Export', mCsv:'Table (.csv)', clearMarks:'Clear all colonies on this image', cleared:'Colonies cleared on this image. ↶ to undo.', hideIgn:'Hide ignored images', mXlsx:'Excel (.xlsx)', xlsxNoLib:'The Excel module could not load (offline?).', mPdf:'Report (.pdf)', newGroup:'New group',
     expName:'Experiment name', expDesc:'Short description', required:'required', optional:'optional', cancel:'Cancel', create:'Create report',
     pdfEnglish:'The report is written in English so it can be shared as is.', incGraph:'Add a final page comparing all groups (CFU/sample)',
     folderData:'Counts for this folder', wipe:'Erase all counts for this folder',
@@ -439,7 +446,7 @@ $('ver').textContent = VERSION;
 
 /* ---------- Réglages (gardés dans le navigateur) ---------- */
 const COLORS = ['#F2C14E', '#FF4F4F', '#3FD0E0', '#5BD65B', '#FF5FD2', '#FFFFFF'];
-const S = Object.assign({ size:9, color:COLORS[0], num:false, keepZoom:false, sep:'_', csvSep:';' }, store.get('petri.count.settings', {}));
+const S = Object.assign({ size:9, color:COLORS[0], num:false, keepZoom:false, sep:'_', csvSep:';', hideIgn:false }, store.get('petri.count.settings', {}));
 const saveS = () => { store.set('petri.count.settings', S); renderAll(); };
 function buildSettings(){
   const r = $('sSize'); r.value = S.size; $('vSize').textContent = S.size + ' px';
@@ -680,13 +687,26 @@ async function show(i){
   $('marks').setAttribute('viewBox', '0 0 ' + natW + ' ' + natH);
   showEmpty(false);
   if (S.keepZoom && sameSize && zoom > 1) applyView(); else fit(); // même zone sur l'image suivante
-  $('fileName').textContent = f.name; $('fileIdx').textContent = (idx + 1) + ' / ' + files.length;
-  $('btnPrev').disabled = idx === 0; $('btnNext').disabled = idx === files.length - 1;
+  $('fileName').textContent = f.name;
   renderAll(); scheduleSave();
   revealRow();
 }
-$('btnPrev').addEventListener('click', () => show(idx - 1));
-$('btnNext').addEventListener('click', () => show(idx + 1));
+/* Images ignorées masquées (case sous la liste) : rien n'est supprimé, elles sortent seulement de la liste, du décompte
+   « 32 / 103 » et de la navigation. L'image en cours reste affichée, pour pouvoir changer d'avis. */
+const imgIgnored = f => { const r = data.images[f.name]; return !!r && !r.pending && (dbl() ? [0, 1].every(i => (fieldsOf(r, i).status || '') === 'ignored') : (r.status || '') === 'ignored'); };
+const hidden = i => S.hideIgn && i !== idx && imgIgnored(files[i]);
+function nextIdx(d){ for (let i = idx + d; i >= 0 && i < files.length; i += d) if (!(S.hideIgn && imgIgnored(files[i]))) return i; return -1; }
+function step(d){ const i = nextIdx(d); if (i >= 0) show(i); }
+function renderNav(){
+  if (idx < 0){ $('fileIdx').textContent = ''; return; }
+  if (!S.hideIgn) $('fileIdx').textContent = (idx + 1) + ' / ' + files.length;
+  else { const kept = files.map(imgIgnored); const total = kept.filter(x => !x).length;
+    $('fileIdx').textContent = (kept[idx] ? '–' : kept.slice(0, idx + 1).filter(x => !x).length) + ' / ' + total; }
+  $('btnPrev').disabled = nextIdx(-1) < 0; $('btnNext').disabled = nextIdx(1) < 0;
+}
+$('btnPrev').addEventListener('click', () => step(-1));
+$('btnNext').addEventListener('click', () => step(1));
+$('cHideIgn').addEventListener('change', e => { S.hideIgn = e.target.checked; e.target.blur(); saveS(); revealRow(); });
 
 /* ---------- Zoom et déplacement ---------- */
 let base = 1, zoom = 1, tx = 0, ty = 0;
@@ -784,6 +804,7 @@ function doOp(a, reverse){
     const r = rec(); if (r){ C[0].prefix = r.prefix; syncInputs(); }
     return;
   }
+  if (a.op === 'clear'){ rec().marks = reverse ? a.m.slice() : []; return; }
   const r = rec(), add = (a.op === 'add') !== !!reverse;
   if (add) r.marks.splice(a.i, 0, a.m); else r.marks.splice(a.i, 1);
 }
@@ -791,6 +812,10 @@ function apply(a){ doOp(a); const h = H(); h.undo.push(a); h.redo = []; changed(
 function undo(){ const h = H(), a = h.undo.pop(); if (!a) return; doOp(a, true); h.redo.push(a); changed(); }
 function redo(){ const h = H(), a = h.redo.pop(); if (!a) return; doOp(a); h.undo.push(a); changed(); }
 $('btnUndo').addEventListener('click', undo);
+// corbeille en pixel art (8 × 9) : efface tous les repères de l'image en cours (annulable avec ↶)
+$('btnClear').innerHTML = '<svg viewBox="0 0 8 9" aria-hidden="true">' + ['..####..', '########', '........', '.######.', '.#.##.#.', '.#.##.#.', '.#.##.#.', '.#.##.#.', '.######.']
+  .map((row, y) => [...row].map((c, x) => c === '#' ? '<rect x="' + x + '" y="' + y + '" width="1" height="1" fill="currentColor"/>' : '').join('')).join('') + '</svg>';
+$('btnClear').addEventListener('click', () => { const r = rec(); if (!r || !r.marks.length) return; apply({ op:'clear', m:r.marks.slice() }); toast(t('cleared')); });
 $('btnRedo').addEventListener('click', redo);
 function changed(){ renderAll(); scheduleSave(); }
 
@@ -975,17 +1000,19 @@ $('btnAdjust').addEventListener('click', () => { adjusting = !adjusting; if (adj
 function renderMarks(){
   const r = rec(), svg = $('marks'); if (!r){ svg.innerHTML = ''; return; }
   const s = base*zoom, rad = S.size / s, w = 2.5 / s, fs = 18 / s; // taille constante à l'écran, quel que soit le zoom
+  // boîte marquée NC : ses repères restent visibles mais estompés (40 %)
+  const nc = m => (fieldsOf(r, dbl() ? plateOf(m, natH / natW) : 0).status || '') === 'nc';
   svg.innerHTML = circlesSVG(s) + r.marks.map((m, i) => { const x = (m[0]*natW).toFixed(1), y = (m[1]*natH).toFixed(1);
-    return '<circle cx="' + x + '" cy="' + y + '" r="' + rad + '" fill="none" stroke="#1A1A1A" stroke-width="' + (w*2.2) + '"/>' +
+    return '<g' + (nc(m) ? ' opacity=".4"' : '') + '><circle cx="' + x + '" cy="' + y + '" r="' + rad + '" fill="none" stroke="#1A1A1A" stroke-width="' + (w*2.2) + '"/>' +
       '<circle cx="' + x + '" cy="' + y + '" r="' + rad + '" fill="none" stroke="' + S.color + '" stroke-width="' + w + '"/>' +
-      (S.num ? '<text x="' + (+x + rad + 2/s) + '" y="' + (+y - rad) + '" font-size="' + fs + '" font-family="Pixelify Sans, monospace" fill="' + S.color + '" stroke="#1A1A1A" stroke-width="' + (1.6/s) + '" paint-order="stroke" font-weight="700">' + (i + 1) + '</text>' : ''); }).join('');
+      (S.num ? '<text x="' + (+x + rad + 2/s) + '" y="' + (+y - rad) + '" font-size="' + fs + '" font-family="Pixelify Sans, monospace" fill="' + S.color + '" stroke="#1A1A1A" stroke-width="' + (1.6/s) + '" paint-order="stroke" font-weight="700">' + (i + 1) + '</text>' : '') + '</g>'; }).join('');
 }
 /* ---------- Onglet Graphique : moyenne des CFU par groupe (aperçu rapide) ----------
    Seules les images comptées ou nommées comptent (une image juste ouverte, à 0 et sans nom, fausserait la moyenne). */
 let tab = 'res';
 function setTab(k){
   tab = k; $('tabRes').setAttribute('aria-selected', String(k === 'res')); $('tabGraph').setAttribute('aria-selected', String(k === 'graph'));
-  $('paneRes').hidden = k !== 'res'; $('paneGraph').hidden = k !== 'graph';
+  $('paneRes').hidden = $('hideIgnBox').hidden = k !== 'res'; $('paneGraph').hidden = k !== 'graph';
   if (k === 'graph') renderGraph(); else revealRow();
 }
 $('tabRes').addEventListener('click', () => setTab('res'));
@@ -1078,6 +1105,7 @@ function renderTable(){
   const tb = $('rows'); if (!tb) return;
   tb.innerHTML = '';
   files.forEach((f, i) => {
+    if (hidden(i)) return;
     const r = data.images[f.name], open = r && !r.pending;
     const row = (label, grey, count, pi, ign) => {
       const tr = document.createElement('tr'), td1 = document.createElement('td'), td2 = document.createElement('td');
@@ -1086,7 +1114,7 @@ function renderTable(){
       tr.append(td1, td2); tr.addEventListener('click', () => { if (pi != null) plate = pi; if (i === idx){ syncInputs(); renderAll(); } else show(i); }); tb.appendChild(tr);
     };
     if (!open) row(r && r.pending && (r.prefix || '').trim() ? r.prefix.trim() + S.sep + stem(f.name) : stem(f.name), true, '–', null); // pas encore ouverte : en gris
-    else if (dbl()) [0, 1].forEach(pi => { const fl = fieldsOf(r, pi), n = finalName(fl); row(n || stem(f.name) + ' (' + (pi + 1) + ')', !n, shownCount(fl, countOf(r, pi)), pi, fl.status === 'ignored'); }); // une ligne par boîte
+    else if (dbl()) [0, 1].forEach(pi => { const fl = fieldsOf(r, pi), n = finalName(fl); if (S.hideIgn && i !== idx && fl.status === 'ignored') return; row(n || stem(f.name) + ' (' + (pi + 1) + ')', !n, shownCount(fl, countOf(r, pi)), pi, fl.status === 'ignored'); }); // une ligne par boîte
     else { const n = finalName(r); row(n || stem(f.name), !n, shownCount(r, r.marks.length), null, r.status === 'ignored'); }
   });
 }
@@ -1099,10 +1127,13 @@ function revealRow(){
 }
 function renderAll(){
   const r = rec();
+  renderNav();
+  const nIgn = files.filter(imgIgnored).length; $('cHideIgn').checked = S.hideIgn;
+  $('hideIgnLbl').textContent = t('hideIgn') + (nIgn ? ' (' + nIgn + ')' : '');
   $('count').textContent = !r ? 0 : dbl() ? countOf(r, 0) + ' · ' + countOf(r, 1) : r.marks.length; // mode 2 boîtes : boîte 1 · boîte 2
   document.querySelector('.counter .num span').textContent = dbl() ? 'CFU (1 · 2)' : 'CFU';
   const h = r ? H() : { undo:[], redo:[] };
-  $('btnUndo').disabled = !h.undo.length; $('btnRedo').disabled = !h.redo.length;
+  $('btnUndo').disabled = !h.undo.length; $('btnRedo').disabled = !h.redo.length; $('btnClear').disabled = !r || !r.marks.length;
   const fe = $('finalName');
   if (dbl() && r){ // les deux noms ; celui de la boîte en cours d'édition en gras
     fe.innerHTML = ''; fe.classList.remove('fallback');
@@ -1400,8 +1431,8 @@ document.addEventListener('keydown', e => {
   if (mod && e.key.toLowerCase() === 'z' && !typing){ e.preventDefault(); e.shiftKey ? redo() : undo(); return; }
   if (mod && e.key.toLowerCase() === 'y' && !typing){ e.preventDefault(); redo(); return; }
   if (typing){ if (e.key === 'Enter' && document.activeElement.id !== 'inGroup') document.activeElement.blur(); return; }
-  if (e.key === 'ArrowRight' || e.key === 'PageDown'){ e.preventDefault(); if (idx < files.length - 1) show(idx + 1); }
-  else if (e.key === 'ArrowLeft' || e.key === 'PageUp'){ e.preventDefault(); if (idx > 0) show(idx - 1); }
+  if (e.key === 'ArrowRight' || e.key === 'PageDown'){ e.preventDefault(); step(1); }
+  else if (e.key === 'ArrowLeft' || e.key === 'PageUp'){ e.preventDefault(); step(-1); }
   else if (e.key === '0') fit();
 });
 
