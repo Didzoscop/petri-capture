@@ -78,9 +78,14 @@ input[type=text]:focus{outline:none;background:#fff}
 .platebar .btn[aria-pressed="true"]{background:var(--ink);color:var(--paper)}
 .screen.adjusting{cursor:move}
 .nav{display:flex;align-items:center;gap:.8rem;padding:0 var(--b) var(--b) 0}
-.nav .file{flex:1;min-width:0;text-align:center;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.nav .file b{display:block;font-size:1.05rem;overflow:hidden;text-overflow:ellipsis}
-.nav .file span{display:block;font-size:1.35rem;font-weight:700;color:var(--ink);font-variant-numeric:tabular-nums;line-height:1.15} /* « 3 / 12 » bien lisible */
+/* sous l'image : nom final encadré, puis « 3 / 12 » bien lisible et le nom du fichier en petit */
+.nav .file{flex:1;min-width:0;text-align:center;display:flex;flex-direction:column;align-items:center;gap:.2rem}
+.nav .final{margin:0;max-width:100%;min-height:0;padding:.1rem .6rem;font-size:1.05rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;word-break:normal}
+.nav .final .pl.off{font-weight:400;color:var(--muted)}
+.nav .final .pl + .pl{margin-left:1.2rem} /* mode 2 boîtes : les deux noms côte à côte, celui en cours en gras */
+.nav .idx{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;line-height:1.15}
+.nav .idx b{font-size:1.35rem;font-variant-numeric:tabular-nums}
+.nav .idx small{font-size:.75rem;color:var(--muted);margin-left:.5rem}
 .nav .btn{min-width:9rem}
 
 /* ---------- Panneau de droite : compteur, nom, tableau ---------- */
@@ -126,15 +131,24 @@ input[type=text]:focus{outline:none;background:#fff}
 .naming .sub{display:flex;align-items:center;gap:.35rem;margin-top:.35rem}
 .naming .sub .chips{flex:1;min-height:0}
 .naming .sub .btn{flex:none;margin-left:auto}
+/* petit carré ▾ à droite d'un champ : menu « Apply to all » */
+.naming .withdd{display:flex;align-items:flex-start;gap:.4rem}
+.naming .withdd > input,.naming .withdd > .unit{flex:1;min-width:0}
+.naming .withdd input{margin-right:0}
+.naming .withdd > .unit{margin-right:0}
+.ddwrap{position:relative;flex:none}
+.ddspace{flex:none;width:32px} /* champ sans menu : même bord droit que les autres */
+.btn.dd{width:32px;min-height:32px;height:32px;padding:0;box-shadow:var(--b) var(--b) 0 var(--ink)}
+.btn.dd svg{width:10px;height:6px;shape-rendering:crispEdges}
+.btn.dd[aria-expanded="true"]{background:var(--ink);color:var(--paper)}
+.ddwrap .menu{left:auto;right:0;min-width:15rem}
+.ddwrap .menu button{font-size:.95rem;min-height:38px}
 .naming .chip{font-size:.8rem}
 .naming .chip button{min-height:26px;padding:.05rem .4rem;gap:.3rem}
 .naming .chip .x{padding:.05rem .3rem}
 .naming .chip .tick{width:13px;height:13px}
-.naming .chips.scope{margin-top:.35rem;min-height:0}
 .naming .chips.plates{margin-bottom:.45rem}
 .naming .chips.plates .chip{font-size:.95rem}
-.naming .final .pl{display:block}
-.naming .final .pl.off{font-weight:400;color:var(--muted)}
 /* unités dans le champ, en gris (« 1: » avant, « % » ou « µL » après) : tous les champs ont les mêmes bords */
 .naming .unit{position:relative;display:flex;margin-right:calc(-1 * var(--b))}
 .naming .unit input{flex:1;width:auto;min-width:3rem}
@@ -148,7 +162,6 @@ input[type=text]:focus{outline:none;background:#fff}
 .naming .chips.dils button{padding:.05rem .45rem}
 tr.ign td{color:#B5AC98;text-decoration:line-through}
 tr.cur.ign td{color:#8C8370}
-.naming .final{margin-top:.2rem;padding:.2rem .45rem;font-size:.95rem;min-height:calc(1.35em + .4rem + 4px)}
 /* tableau toujours visible, il prend la place qui reste */
 .table{flex:1 0 13rem;min-height:13rem;display:flex;flex-direction:column;padding:0}
 .table .head{display:flex;justify-content:space-between;align-items:flex-end;gap:.5rem;padding:.45rem .6rem 0;border-bottom:var(--b) solid var(--ink)}
@@ -229,7 +242,6 @@ dialog.pix .row{display:flex;justify-content:flex-end;margin-top:1rem;padding:0 
 .menu button[disabled]{opacity:.4;cursor:default}
 .menu .mhead{padding:.55rem .8rem .2rem;font-size:1.3rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--ink);border-top:2px dashed var(--ink)}
 .menu .mhead:first-child{border-top:0}
-.chips.scope{margin-top:.5rem;margin-bottom:0}
 .chip.plus button{padding:.15rem .6rem;font-weight:700}
 .toast{position:absolute;right:.7rem;bottom:.5rem;max-width:55%;text-align:right;color:#E8E2D2;font-size:.8rem;text-shadow:0 1px 2px #000;
   pointer-events:none;opacity:0;transition:opacity .3s} /* message discret, en bas à droite de l'image */
@@ -287,7 +299,7 @@ dialog.pix .row{display:flex;justify-content:flex-end;margin-top:1rem;padding:0 
   </div></div>
   <div class="nav">
     <button class="btn" id="btnPrev" type="button" disabled>◀ <span data-i18n="prev"></span></button>
-    <div class="file"><b id="fileName">–</b><span id="fileIdx"></span></div>
+    <div class="file"><div class="final" id="finalName"></div><div class="idx"><b id="fileIdx"></b><small id="fileName"></small></div></div>
     <button class="btn" id="btnNext" type="button" disabled><span data-i18n="next"></span> ▶</button>
   </div>
 </div>
@@ -302,22 +314,20 @@ dialog.pix .row{display:flex;justify-content:flex-end;margin-top:1rem;padding:0 
   <div class="card naming">
     <div class="chips plates" id="plateSel" hidden></div>
     <div class="frow"><label class="lbl" for="inPrefix" data-i18n="prefix"></label>
-      <div class="fctl"><input type="text" id="inPrefix" autocomplete="off" data-i18n-ph="prefixPh"><div class="chips scope" id="prefixScope"></div></div></div>
+      <div class="fctl"><div class="withdd"><input type="text" id="inPrefix" autocomplete="off" data-i18n-ph="prefixPh"><div class="ddwrap" id="prefixDD"><button class="btn dd" type="button" aria-haspopup="menu" aria-expanded="false" data-i18n-aria="more"></button><div class="menu" role="menu" hidden><button type="button" role="menuitem" id="prefixAll" data-i18n="prefixAllItem"></button></div></div></div></div></div>
     <div class="frow"><span class="lbl" data-i18n="group"></span>
       <div class="fctl"><div class="chips" id="chips"></div>
         <div class="inline" id="groupAdd" hidden><input type="text" id="inGroup" autocomplete="off" data-i18n-ph="groupPh">
           <button class="btn small" id="btnAddGroup" type="button" data-i18n="add"></button></div></div></div>
     <div class="frow"><label class="lbl" for="inDil" data-i18n="dilution"></label>
-      <div class="fctl"><div class="unit"><span class="pre" id="dilPre"></span><input type="text" id="inDil" autocomplete="off" inputmode="decimal"><span class="suf" id="dilSuf"></span></div>
-        <div class="sub"><div class="chips dils" id="dilChips"></div><button class="btn small" id="btnSetDil" type="button" data-i18n="setDil"></button></div></div></div>
+      <div class="fctl"><div class="withdd"><div class="unit"><span class="pre" id="dilPre"></span><input type="text" id="inDil" autocomplete="off" inputmode="decimal"><span class="suf" id="dilSuf"></span></div><div class="ddwrap" id="dilDD"><button class="btn dd" type="button" aria-haspopup="menu" aria-expanded="false" data-i18n-aria="more"></button><div class="menu" role="menu" hidden><button type="button" role="menuitem" id="btnSetDil" data-i18n="setDilItem"></button><button type="button" role="menuitem" id="dilAllBtn" data-i18n="dilAllItem"></button></div></div></div>
+        <div class="sub"><div class="chips dils" id="dilChips"></div></div></div></div>
     <div class="frow"><label class="lbl" for="inVol" data-i18n="volume"></label>
-      <div class="fctl"><div class="unit"><input type="text" id="inVol" autocomplete="off" inputmode="decimal"><span class="suf">µL</span></div>
-        <div class="sub"><button class="btn small" id="btnDilAll" type="button" data-i18n="dilAll"></button></div></div></div>
+      <div class="fctl"><div class="withdd"><div class="unit"><input type="text" id="inVol" autocomplete="off" inputmode="decimal"><span class="suf">µL</span></div><div class="ddwrap" id="volDD"><button class="btn dd" type="button" aria-haspopup="menu" aria-expanded="false" data-i18n-aria="more"></button><div class="menu" role="menu" hidden><button type="button" role="menuitem" id="volAll" data-i18n="volAllItem"></button></div></div></div></div></div>
     <div class="frow"><span class="lbl" data-i18n="status"></span>
       <div class="fctl"><div class="chips" id="statusChips"></div></div></div>
     <div class="frow"><label class="lbl" for="inName" data-i18n="name"></label>
-      <div class="fctl"><input type="text" id="inName" autocomplete="off" data-i18n-ph="namePh"></div></div>
-    <div class="final" id="finalName"></div>
+      <div class="fctl"><div class="withdd"><input type="text" id="inName" autocomplete="off" data-i18n-ph="namePh"><span class="ddspace"></span></div></div></div>
   </div>
   <div class="card table">
     <div class="head">
@@ -389,7 +399,7 @@ dialog.pix .row{display:flex;justify-content:flex-end;margin-top:1rem;padding:0 
 (() => {
 'use strict';
 const $ = id => document.getElementById(id);
-const VERSION = 'v29 · 13/11';
+const VERSION = 'v31 · 13/11';
 const SAVE_FILE = 'petri-comptage.json';
 const IMG_RE = /\.(jpe?g|png|webp|gif|bmp|avif)$/i;
 const canWriteFolder = typeof window.showDirectoryPicker === 'function'; // Chrome, Edge : lecture et écriture dans le dossier
@@ -406,7 +416,7 @@ const I18N = {
     reopen: p => 'Reopen “' + p.n + '”',
     noWrite:'This browser cannot write into the folder: the save stays in the browser. Use Chrome or Edge to keep it in the folder.',
     hint:'Left click: add or remove a colony · wheel: zoom · hold right click: move · ← →: image',
-    undo:'Undo', redo:'Redo', prefix:'Prefix', prefixPh:'e.g. 2026-11-04_E.coli', scopeOne:'This one', scopeAll:'All',
+    undo:'Undo', redo:'Redo', prefix:'Prefix', prefixPh:'e.g. 2026-11-04_E.coli', more:'More options', prefixAllItem:'Apply to all images', volAllItem:'Apply this volume to all plates', dilAllItem:'Apply this dilution to all plates', setDilItem:'Dilution notation…',
     prefixAllQ: p => p.v ? 'Apply the prefix “' + p.v + '” to all images?' : 'Remove the prefix from all images?',
     prefixAllD: p => 'All ' + p.n + ' images of the folder will get this prefix, including those not opened yet. The ↶ ↷ arrows on this image can undo it.', apply:'Apply',
     onePlate:'1 plate', twoPlates:'2 plates', adjust:'Adjust circles', adjustDone:'Done', plateN: p => 'Plate ' + p.n,
@@ -416,6 +426,8 @@ const I18N = {
     noteColon:'1:X  (1:10, 1:100…)', notePow:'10^-X  (10^-1, 10^-2…)', notePct:'Percent  (10 %, 1 %…)', noteDec:'Decimal  (0.1, 0.01…)',
     stCounted:'Counted', stZero:'0 growth', stNC:'NC', stIgnored:'Ignore',
     dilAllQ: p => 'Apply dilution ' + (p.d || '(none)') + ' and volume ' + (p.v || '–') + ' µL to all plates?',
+    volAllQ: p => 'Apply volume ' + (p.v || '–') + ' µL to all plates?',
+    dilOnlyQ: p => 'Apply dilution ' + (p.d || '(none)') + ' to all plates?',
     dilAllD: p => 'All ' + p.n + ' images of the folder (every plate) will get these values, replacing those already set; images not opened yet get them too. The ↶ ↷ arrows on this image can undo it.',
     unitC:'CFU/sample', add:'Add', name:'Name', namePh:'e.g. 10-3', results:'Results', colName:'Name', graph:'Graph', noGroup:'No group', copyGraph:'Copy the graph', graphCopied:'Graph copied to the clipboard.', copyFail:'Could not copy the graph.',
     graphEmpty:'Tick a group, a dilution and a volume for the counted plates to see the mean CFU/sample per group.',
@@ -796,9 +808,9 @@ function doOp(a, reverse){
   if (a.op === 'dilAll'){
     for (const k in a.before){ const r = data.images[k], b = a.before[k]; if (!r) continue;
       if (reverse){ r.dilution = b.d; r.vol = b.v; if (r.p2 && b.p2){ r.p2.dilution = b.p2.d; r.p2.vol = b.p2.v; } }
-      else { r.dilution = a.d; r.vol = a.v; p2Of(r).dilution = a.d; p2Of(r).vol = a.v; } }
+      else { if (a.what !== 'vol'){ r.dilution = a.d; p2Of(r).dilution = a.d; } if (a.what !== 'dil'){ r.vol = a.v; p2Of(r).vol = a.v; } } }
     // images pas encore ouvertes : elles prendront les valeurs reportées à leur ouverture (un volume changé ensuite est donc bien reporté)
-    C.forEach((c, i) => { const b = reverse ? (a.carry || [])[i] : { dilution:a.d, vol:a.v }; if (b){ c.dilution = b.dilution; c.vol = b.vol; } });
+    C.forEach((c, i) => { const b = reverse ? (a.carry || [])[i] : { dilution:a.what === 'vol' ? c.dilution : a.d, vol:a.what === 'dil' ? c.vol : a.v }; if (b){ c.dilution = b.dilution; c.vol = b.vol; } });
     renderDil(); return;
   }
   if (a.op === 'prefixAll'){
@@ -840,17 +852,20 @@ $('inName').addEventListener('input', e => { const t0 = tgt(); if (!t0) return; 
 // « All » coché quand toutes les images ouvertes ont ce préfixe (même s'il n'y en a qu'une : les suivantes le recevront) ;
 // pas coché tant qu'aucun préfixe n'est saisi
 const allSamePrefix = () => { const recs = Object.values(data.images), r = rec(); return !!r && !!(r.prefix || '').trim() && recs.every(x => (x.prefix || '') === r.prefix); };
+// menus ▾ : un seul ouvert à la fois, fermés par un clic ailleurs ou Échap
+function openDD(w, on){ document.querySelectorAll('.ddwrap').forEach(x => { const o = on && x === w; x.querySelector('.menu').hidden = !o; x.querySelector('.dd').setAttribute('aria-expanded', String(o)); }); }
+const DD_ARROW = '<svg viewBox="0 0 5 3" aria-hidden="true"><rect x="0" y="0" width="5" height="1" fill="currentColor"/><rect x="1" y="1" width="3" height="1" fill="currentColor"/><rect x="2" y="2" width="1" height="1" fill="currentColor"/></svg>';
+document.querySelectorAll('.ddwrap').forEach(w => { const b = w.querySelector('.dd'); b.innerHTML = DD_ARROW;
+  b.addEventListener('click', e => { e.stopPropagation(); openDD(w, w.querySelector('.menu').hidden); }); });
+document.addEventListener('click', e => { if (!e.target.closest('.ddwrap')) openDD(null, false); });
+document.addEventListener('keydown', e => { if (e.key === 'Escape') openDD(null, false); });
+// en mode 2 boîtes, chaque boîte a son préfixe (reporté sur les images suivantes) : pas de « toutes les images »
 function renderScope(){
-  const box = $('prefixScope'), all = allSamePrefix(); box.innerHTML = '';
-  box.hidden = dbl(); if (dbl()) return; // en mode 2 boîtes, chaque boîte a son préfixe (reporté sur les images suivantes)
-  [['one', t('scopeOne'), !all], ['all', t('scopeAll'), all]].forEach(([k, label, on]) => {
-    const c = document.createElement('span'); c.className = 'chip'; c.setAttribute('aria-pressed', String(on));
-    const b = document.createElement('button'); b.type = 'button'; b.disabled = idx < 0;
-    const tick = document.createElement('span'); tick.className = 'tick'; tick.setAttribute('aria-hidden', 'true'); b.append(tick, document.createTextNode(label));
-    if (k === 'all') b.addEventListener('click', prefixToAll);
-    c.appendChild(b); box.appendChild(c);
-  });
+  $('prefixDD').hidden = dbl();
+  const r = rec(); $('prefixAll').disabled = !r || allSamePrefix() && !!(r.prefix || '').trim();
+  $('volAll').disabled = $('dilAllBtn').disabled = !tgt();
 }
+$('prefixAll').addEventListener('click', () => { openDD(null, false); prefixToAll(); });
 async function prefixToAll(){
   const r = rec(); if (!r || allSamePrefix()) return;
   const v = (r.prefix || '').trim(), n = files.length;
@@ -948,6 +963,7 @@ $('inDil').addEventListener('blur', () => renderDil());
 $('inDil').addEventListener('input', e => { const t0 = tgt(); if (!t0) return; t0.dilution = C[cur()].dilution = dilFromInput(e.target.value); changed(); });
 $('inVol').addEventListener('input', e => { const t0 = tgt(); if (!t0) return; t0.vol = C[cur()].vol = e.target.value.trim(); changed(); });
 $('btnSetDil').addEventListener('click', () => {
+  openDD(null, false);
   const box = $('dilNotes'); box.innerHTML = '';
   Object.keys(NOTES).forEach(k => { const l = document.createElement('label'); l.className = 'choice';
     const i = document.createElement('input'); i.type = 'radio'; i.name = 'dilnote'; i.value = k; i.checked = (data.dilNote || 'colon') === k;
@@ -957,14 +973,18 @@ $('btnSetDil').addEventListener('click', () => {
 $('dilCancel').addEventListener('click', () => $('dilDlg').close());
 $('dilOk').addEventListener('click', () => { const c = document.querySelector('input[name=dilnote]:checked'); if (c) data.dilNote = c.value; $('dilDlg').close(); changed(); $('inDil').focus(); });
 // dilution et volume de la boîte en cours, appliqués à toutes les boîtes du dossier (annulable avec ↶)
-$('btnDilAll').addEventListener('click', async () => {
+// what : 'vol' (seul le volume), 'dil' (seule la dilution) ; le reste de chaque boîte est gardé
+async function applyAll(what){
+  openDD(null, false);
   const t0 = tgt(); if (!t0) return;
   const d = t0.dilution || '', v = t0.vol || '';
-  if (!(await ask(t('dilAllQ', { d, v }), t('dilAllD', { n:files.length }), t('apply'), t('cancel')))) return;
+  if (!(await ask(t(what === 'vol' ? 'volAllQ' : 'dilOnlyQ', { d, v }), t('dilAllD', { n:files.length }), t('apply'), t('cancel')))) return;
   const before = {}, carry = C.map(c => ({ dilution:c.dilution, vol:c.vol }));
   for (const k in data.images){ const r = data.images[k]; if (r.pending) continue; before[k] = { d:r.dilution, v:r.vol, p2:r.p2 ? { d:r.p2.dilution, v:r.p2.vol } : null }; }
-  apply({ op:'dilAll', d, v, before, carry });
-});
+  apply({ op:'dilAll', d, v, what, before, carry });
+}
+$('volAll').addEventListener('click', () => applyAll('vol'));
+$('dilAllBtn').addEventListener('click', () => applyAll('dil'));
 const STATUS = [['', 'stCounted'], ['zero', 'stZero'], ['nc', 'stNC'], ['ignored', 'stIgnored']];
 function renderStatus(){
   const box = $('statusChips'), t0 = tgt(); box.innerHTML = '';
