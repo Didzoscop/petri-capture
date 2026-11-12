@@ -114,28 +114,36 @@ input[type=text]:focus{outline:none;background:#fff}
 .final.fallback{color:var(--muted);font-weight:400}
 /* carte du nom, compacte : titre à gauche de son champ ; titres (17,6 px) toujours plus grands que le contenu (15 px) */
 .naming{padding:.5rem .6rem}
-.naming .frow{display:grid;grid-template-columns:6.3rem minmax(0,1fr);gap:.45rem;align-items:start;margin-bottom:.4rem}
-.naming .lbl{margin:0;padding-top:.3rem;font-size:1.1rem}
-.naming .frow.stack{grid-template-columns:minmax(0,1fr);gap:.2rem} /* listes : titre au-dessus, toute la largeur pour les cases */
-.naming .frow.stack .lbl{padding-top:0}
+.naming .frow{display:grid;grid-template-columns:5.6rem minmax(0,1fr);gap:.5rem;align-items:start;margin-bottom:.5rem}
+.naming .lbl{margin:0;font-size:1.1rem;line-height:32px} /* centré sur la 1re ligne de contrôles (32 px) */
+/* panneau étroit : tous les titres passent au-dessus de leur champ (toujours la même disposition pour tous) */
+.naming{container-type:inline-size}
+@container (max-width:330px){ .naming .frow{grid-template-columns:minmax(0,1fr);gap:.15rem} .naming .lbl{line-height:1.3} }
 .naming input[type=text]{min-height:32px;font-size:.95rem;padding:0 .45rem}
-.naming .chips{gap:.3rem;margin-bottom:0}
+.naming .chips{gap:.3rem;margin-bottom:0;min-height:32px;align-items:center;align-content:center}
 .naming .chips + .inline{margin-top:.35rem}
+/* 2e ligne d'un champ : cases à gauche, bouton d'action à droite */
+.naming .sub{display:flex;align-items:center;gap:.35rem;margin-top:.35rem}
+.naming .sub .chips{flex:1;min-height:0}
+.naming .sub .btn{flex:none;margin-left:auto}
 .naming .chip{font-size:.8rem}
 .naming .chip button{min-height:26px;padding:.05rem .4rem;gap:.3rem}
 .naming .chip .x{padding:.05rem .3rem}
 .naming .chip .tick{width:13px;height:13px}
-.naming .chips.scope{margin-top:.35rem}
+.naming .chips.scope{margin-top:.35rem;min-height:0}
 .naming .chips.plates{margin-bottom:.45rem}
 .naming .chips.plates .chip{font-size:.95rem}
 .naming .final .pl{display:block}
 .naming .final .pl.off{font-weight:400;color:var(--muted)}
-.naming .unit{display:flex;align-items:center;gap:.3rem .3rem;flex-wrap:wrap}
-.naming .unit input{flex:0 1 4.6rem;width:4.6rem;min-width:3rem}
+/* unités dans le champ, en gris (« 1: » avant, « % » ou « µL » après) : tous les champs ont les mêmes bords */
+.naming .unit{position:relative;display:flex;margin-right:calc(-1 * var(--b))}
+.naming .unit input{flex:1;width:auto;min-width:3rem}
+.naming .unit .pre,.naming .unit .suf{position:absolute;top:0;height:32px;line-height:32px;pointer-events:none}
+.naming .unit .pre{left:calc(.45rem + var(--b))}
+.naming .unit .suf{right:calc(.45rem + var(--b) * 2)}
 .naming .unit .pre,.naming .unit .suf{color:var(--muted);font-size:.95rem;white-space:nowrap}
-.naming .unit .btn{flex:none;margin-left:auto}
+.naming .unit .pre:empty,.naming .unit .suf:empty{display:none}
 #dilNotes .choice{margin:.25rem 0}
-.naming .chips.dils{margin-top:.35rem}
 .naming .chips.dils:empty{display:none}
 .naming .chips.dils button{padding:.05rem .45rem}
 tr.ign td{color:#B5AC98;text-decoration:line-through}
@@ -295,18 +303,17 @@ dialog.pix .row{display:flex;justify-content:flex-end;margin-top:1rem;padding:0 
     <div class="chips plates" id="plateSel" hidden></div>
     <div class="frow"><label class="lbl" for="inPrefix" data-i18n="prefix"></label>
       <div class="fctl"><input type="text" id="inPrefix" autocomplete="off" data-i18n-ph="prefixPh"><div class="chips scope" id="prefixScope"></div></div></div>
-    <div class="frow stack"><span class="lbl" data-i18n="group"></span>
+    <div class="frow"><span class="lbl" data-i18n="group"></span>
       <div class="fctl"><div class="chips" id="chips"></div>
         <div class="inline" id="groupAdd" hidden><input type="text" id="inGroup" autocomplete="off" data-i18n-ph="groupPh">
           <button class="btn small" id="btnAddGroup" type="button" data-i18n="add"></button></div></div></div>
     <div class="frow"><label class="lbl" for="inDil" data-i18n="dilution"></label>
-      <div class="fctl"><div class="unit"><span class="pre" id="dilPre"></span><input type="text" id="inDil" autocomplete="off" inputmode="decimal"><span class="suf" id="dilSuf"></span>
-        <button class="btn small" id="btnSetDil" type="button" data-i18n="setDil"></button></div>
-        <div class="chips dils" id="dilChips"></div></div></div>
+      <div class="fctl"><div class="unit"><span class="pre" id="dilPre"></span><input type="text" id="inDil" autocomplete="off" inputmode="decimal"><span class="suf" id="dilSuf"></span></div>
+        <div class="sub"><div class="chips dils" id="dilChips"></div><button class="btn small" id="btnSetDil" type="button" data-i18n="setDil"></button></div></div></div>
     <div class="frow"><label class="lbl" for="inVol" data-i18n="volume"></label>
-      <div class="fctl"><div class="unit"><input type="text" id="inVol" autocomplete="off" inputmode="decimal"><span class="suf">µL</span>
-        <button class="btn small" id="btnDilAll" type="button" data-i18n="dilAll"></button></div></div></div>
-    <div class="frow stack"><span class="lbl" data-i18n="status"></span>
+      <div class="fctl"><div class="unit"><input type="text" id="inVol" autocomplete="off" inputmode="decimal"><span class="suf">µL</span></div>
+        <div class="sub"><button class="btn small" id="btnDilAll" type="button" data-i18n="dilAll"></button></div></div></div>
+    <div class="frow"><span class="lbl" data-i18n="status"></span>
       <div class="fctl"><div class="chips" id="statusChips"></div></div></div>
     <div class="frow"><label class="lbl" for="inName" data-i18n="name"></label>
       <div class="fctl"><input type="text" id="inName" autocomplete="off" data-i18n-ph="namePh"></div></div>
@@ -382,7 +389,7 @@ dialog.pix .row{display:flex;justify-content:flex-end;margin-top:1rem;padding:0 
 (() => {
 'use strict';
 const $ = id => document.getElementById(id);
-const VERSION = 'v28 · 13/11';
+const VERSION = 'v29 · 13/11';
 const SAVE_FILE = 'petri-comptage.json';
 const IMG_RE = /\.(jpe?g|png|webp|gif|bmp|avif)$/i;
 const canWriteFolder = typeof window.showDirectoryPicker === 'function'; // Chrome, Edge : lecture et écriture dans le dossier
@@ -911,9 +918,17 @@ function parseFactor(str){ // facteur de dilution F (dilué F fois) ; 0 si illis
 }
 const dilFromInput = x => { x = x.trim(); if (!x) return ''; if (/[:^%e\/]/i.test(x) || x.startsWith('-')) return x; const n = note(); return n.pre + x + n.suf; };
 const dilToInput = d => { const n = note(); d = d || ''; return d.startsWith(n.pre) && d.endsWith(n.suf) && d.length >= n.pre.length + n.suf.length ? d.slice(n.pre.length, d.length - n.suf.length || undefined) : d; };
+// marge intérieure des champs à unité, pour que le texte tapé commence après « 1: » et s'arrête avant « µL »
+function fitUnits(){
+  document.querySelectorAll('.naming .unit').forEach(u => { const i = u.querySelector('input'), pre = u.querySelector('.pre'), suf = u.querySelector('.suf');
+    i.style.paddingLeft = pre && pre.textContent ? 'calc(.45rem + ' + (pre.offsetWidth + 3) + 'px)' : '';
+    i.style.paddingRight = suf && suf.textContent ? 'calc(.45rem + ' + (suf.offsetWidth + 3) + 'px)' : ''; });
+}
+document.fonts && document.fonts.ready.then(() => fitUnits());
 function renderDil(){
   const n = note(), t0 = tgt();
   $('dilPre').textContent = n.pre; $('dilSuf').textContent = n.suf;
+  fitUnits();
   if (document.activeElement !== $('inDil')) $('inDil').value = t0 ? dilToInput(t0.dilution) : '';
   if (document.activeElement !== $('inVol')) $('inVol').value = t0 ? (t0.vol == null ? '' : t0.vol) : '';
   $('inDil').placeholder = n.pre === '1:' ? '10' : n.pre ? '1' : n.suf ? '10' : '0.1';
