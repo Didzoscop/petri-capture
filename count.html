@@ -76,6 +76,22 @@ input[type=text]:focus{outline:none;background:#fff}
 /* mode 2 boîtes : choix 1/2 boîtes et réglage des cercles, en haut à gauche de l'image */
 .platebar{position:absolute;left:.6rem;top:.6rem;display:flex;gap:.4rem;padding:0 var(--b) var(--b) 0;z-index:2}
 .platebar .btn[aria-pressed="true"]{background:var(--ink);color:var(--paper)}
+/* réglages d'affichage de l'image (roue crantée en bas à droite) : n'agissent que sur l'aperçu */
+.imgadj{position:absolute;right:.6rem;bottom:.6rem;z-index:3;display:flex;flex-direction:column;align-items:flex-end;gap:.5rem;padding:0 var(--b) var(--b) 0}
+.btn.gear{width:34px;min-height:32px;padding:0}
+.btn.gear svg{width:18px;height:18px;shape-rendering:crispEdges}
+.btn.gear[aria-expanded="true"],.btn.gear.on{background:var(--ink);color:var(--paper)}
+.adjpanel{width:15.5rem;background:var(--paper);color:var(--ink);border:var(--b) solid var(--ink);box-shadow:var(--b) var(--b) 0 var(--ink);padding:.5rem .7rem .3rem;cursor:default;font-size:.9rem}
+.adjhead{display:flex;align-items:center;justify-content:space-between;margin-bottom:.2rem}
+.adjhead b{text-transform:uppercase;letter-spacing:.06em}
+.adjbtns{display:flex;gap:.35rem;align-items:center;padding:0 var(--b) var(--b) 0}
+.adjbtns .btn.small,.adjbtns .btn.dd{min-height:28px;height:28px}
+.adjbtns .btn.dd{width:28px}
+.adjscope{margin:0 0 .2rem;font-size:.75rem;color:var(--muted)}
+.adjrow{display:grid;grid-template-columns:5.2rem 1fr 2.6rem;align-items:center;gap:.4rem}
+.adjrow span:last-child{text-align:right;color:var(--muted);font-variant-numeric:tabular-nums}
+.adjpanel input[type=range]{height:28px}
+.adjpanel .check{margin:.15rem 0;min-height:28px}
 .screen.adjusting{cursor:move}
 .nav{display:flex;align-items:center;gap:.8rem;padding:0 var(--b) var(--b) 0}
 /* sous l'image : nom final encadré, puis « 3 / 12 » bien lisible et le nom du fichier en petit */
@@ -243,7 +259,7 @@ dialog.pix .row{display:flex;justify-content:flex-end;margin-top:1rem;padding:0 
 .menu .mhead{padding:.55rem .8rem .2rem;font-size:1.3rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--ink);border-top:2px dashed var(--ink)}
 .menu .mhead:first-child{border-top:0}
 .chip.plus button{padding:.15rem .6rem;font-weight:700}
-.toast{position:absolute;right:.7rem;bottom:.5rem;max-width:55%;text-align:right;color:#E8E2D2;font-size:.8rem;text-shadow:0 1px 2px #000;
+.toast{position:absolute;right:3.6rem;bottom:.6rem;max-width:55%;text-align:right;color:#E8E2D2;font-size:.8rem;text-shadow:0 1px 2px #000;
   pointer-events:none;opacity:0;transition:opacity .3s} /* message discret, en bas à droite de l'image */
 .toast.show{opacity:.9}
 @media (max-height:640px){ .side{gap:.5rem} .card{padding:.45rem .6rem} }
@@ -294,6 +310,16 @@ dialog.pix .row{display:flex;justify-content:flex-end;margin-top:1rem;padding:0 
         <button class="btn small" id="zIn" type="button" aria-label="+">+</button>
       </div>
       <div class="zoomhint" id="zoomhint" hidden data-i18n="hint"></div>
+      <div class="imgadj" id="imgAdj" hidden>
+        <div class="adjpanel" id="adjPanel" hidden>
+          <div class="adjhead"><b data-i18n="adjTitle"></b><span class="adjbtns"><button class="btn small" id="adjReset" type="button" data-i18n="adjReset"></button><div class="ddwrap" id="adjDD"><button class="btn dd" type="button" aria-haspopup="menu" aria-expanded="false" data-i18n-aria="more"></button><div class="menu" role="menu" hidden><button type="button" role="menuitem" id="adjAll" data-i18n="adjAll"></button><button type="button" role="menuitem" id="adjResetAll" data-i18n="adjResetAll"></button></div></div></span></div>
+          <p class="adjscope" id="adjScope"></p>
+          <div id="adjSliders"></div>
+          <label class="check"><input type="checkbox" id="adjGray"> <span data-i18n="adjGray"></span></label>
+          <label class="check"><input type="checkbox" id="adjInvert"> <span data-i18n="adjInvert"></span></label>
+        </div>
+        <button class="btn small gear" id="btnAdj" type="button" data-i18n-aria="adjTitle" aria-expanded="false"></button>
+      </div>
       <div class="toast" id="toast" role="status"></div>
     </div>
   </div></div>
@@ -399,7 +425,7 @@ dialog.pix .row{display:flex;justify-content:flex-end;margin-top:1rem;padding:0 
 (() => {
 'use strict';
 const $ = id => document.getElementById(id);
-const VERSION = 'v31 · 13/11';
+const VERSION = 'v32 · 13/11';
 const SAVE_FILE = 'petri-comptage.json';
 const IMG_RE = /\.(jpe?g|png|webp|gif|bmp|avif)$/i;
 const canWriteFolder = typeof window.showDirectoryPicker === 'function'; // Chrome, Edge : lecture et écriture dans le dossier
@@ -436,7 +462,7 @@ const I18N = {
     saveErr:'Save failed', csvDone: p => 'Table saved: ' + p.f,
     loaded: p => p.n + ' images, save restored.', found: p => p.n + ' images found.', permDenied:'Folder access denied.',
     csvHere:'In the image folder', csvElse:'Choose another location…', settings:'Settings', close:'Close',
-    exportBtn:'Export', mCsv:'Table (.csv)', clearMarks:'Clear all colonies on this image', cleared:'Colonies cleared on this image. ↶ to undo.', hideIgn:'Hide ignored images', mXlsx:'Excel (.xlsx)', xlsxNoLib:'The Excel module could not load (offline?).', mPdf:'Report (.pdf)', newGroup:'New group',
+    exportBtn:'Export', mCsv:'Table (.csv)', adjTitle:'Image display', adjReset:'Reset', adjBright:'Brightness', adjContrast:'Contrast', adjSat:'Saturation', adjGray:'Black & white', adjInvert:'Invert colours', adjAll:'Apply to all images', adjResetAll:'Reset all images', adjAllQ:'Apply these display settings to all images?', adjAllD: p => 'All ' + p.n + ' images of the folder will be shown with these settings (replacing their own). Only the display changes: the image files are never modified.', adjResetAllQ:'Reset the display of all images?', adjResetAllD:'Every image goes back to its original look. The image files are never modified.', adjOwn:'This image only · original file unchanged', adjShared:'Same as all images · original file unchanged', clearMarks:'Clear all colonies on this image', cleared:'Colonies cleared on this image. ↶ to undo.', hideIgn:'Hide ignored images', mXlsx:'Excel (.xlsx)', xlsxNoLib:'The Excel module could not load (offline?).', mPdf:'Report (.pdf)', newGroup:'New group',
     expName:'Experiment name', expDesc:'Short description', required:'required', optional:'optional', cancel:'Cancel', create:'Create report',
     pdfEnglish:'The report is written in English so it can be shared as is.', incGraph:'Add a final page comparing all groups (CFU/sample)',
     folderData:'Counts for this folder', wipe:'Erase all counts for this folder',
@@ -677,7 +703,7 @@ window.addEventListener('beforeunload', () => { store.set(localKey(), data); });
 
 /* ---------- Image courante ---------- */
 let url = null, natW = 1, natH = 1;
-function showEmpty(on){ $('empty').hidden = !on; $('pan').hidden = on; $('zoombar').hidden = on; $('zoomhint').hidden = on; $('platebar').hidden = on; }
+function showEmpty(on){ $('empty').hidden = !on; $('pan').hidden = on; $('zoombar').hidden = on; $('zoomhint').hidden = on; $('platebar').hidden = on; $('imgAdj').hidden = on; }
 async function show(i){
   if (!files.length) return;
   if (idx >= 0) await saveNow(); // tout est enregistré avant de quitter l'image
@@ -723,6 +749,51 @@ function renderNav(){
     $('fileIdx').textContent = (kept[idx] ? '–' : kept.slice(0, idx + 1).filter(x => !x).length) + ' / ' + total; }
   $('btnPrev').disabled = nextIdx(-1) < 0; $('btnNext').disabled = nextIdx(1) < 0;
 }
+/* ---------- Réglages d'affichage (luminosité, contraste…) ----------
+   Filtres CSS sur l'aperçu seulement : les fichiers image ne sont jamais modifiés, ni les repères, le rapport ou les exports.
+   Réglages propres à chaque image (image.adj, dans la sauvegarde du dossier) ; « Apply to all images » les met dans data.adjAll,
+   utilisé par toutes les images qui n'ont pas les leurs. */
+const ADJ = [['bright', 'adjBright', 30, 200], ['contrast', 'adjContrast', 30, 300], ['sat', 'adjSat', 0, 300]];
+const adjOf = () => { const r = rec(); return (r && r.adj) || data.adjAll || {}; };
+const adjVal = k => adjOf()[k] == null ? 100 : adjOf()[k];
+function setAdj(k, v){ const r = rec(); if (!r) return; r.adj = Object.assign({}, adjOf()); if (v === undefined) delete r.adj[k]; else r.adj[k] = v; applyAdj(); scheduleSave(); }
+function applyAdj(){
+  const a = adjOf(), f = 'brightness(' + adjVal('bright') + '%) contrast(' + adjVal('contrast') + '%) saturate(' + adjVal('sat') + '%)' + (a.gray ? ' grayscale(1)' : '') + (a.invert ? ' invert(1)' : '');
+  $('img').style.filter = f === 'brightness(100%) contrast(100%) saturate(100%)' ? '' : f;
+  $('btnAdj').classList.toggle('on', !!$('img').style.filter); // roue foncée tant qu'un réglage est actif
+  ADJ.forEach(([k, , mn, mx]) => { const r = $('adj_' + k); if (!r) return; r.value = adjVal(k); r.style.setProperty('--p', ((adjVal(k) - mn) / (mx - mn) * 100) + '%'); $('adjv_' + k).textContent = adjVal(k) + '%'; });
+  $('adjGray').checked = !!a.gray; $('adjInvert').checked = !!a.invert;
+  const r = rec(); $('adjScope').textContent = t(r && r.adj ? 'adjOwn' : 'adjShared');
+}
+ADJ.forEach(([k, key, mn, mx]) => {
+  const row = document.createElement('label'); row.className = 'adjrow';
+  const l = document.createElement('span'); l.dataset.i18n = key;
+  const r = document.createElement('input'); r.type = 'range'; r.min = mn; r.max = mx; r.step = 5; r.id = 'adj_' + k;
+  const v = document.createElement('span'); v.id = 'adjv_' + k;
+  r.addEventListener('input', () => setAdj(k, +r.value));
+  r.addEventListener('dblclick', () => setAdj(k, undefined)); // double-clic : valeur d'origine
+  row.append(l, r, v); $('adjSliders').appendChild(row);
+});
+['gray', 'invert'].forEach(k => $(k === 'gray' ? 'adjGray' : 'adjInvert').addEventListener('change', e => { setAdj(k, e.target.checked || undefined); e.target.blur(); }));
+// Reset : cette image seulement (affichage d'origine, même si les autres ont un réglage commun)
+$('adjReset').addEventListener('click', () => { const r = rec(); if (!r) return; r.adj = {}; applyAdj(); scheduleSave(); });
+$('adjAll').addEventListener('click', async () => {
+  openDD(null, false); const cur = Object.assign({}, adjOf());
+  if (!(await ask(t('adjAllQ'), t('adjAllD', { n:files.length }), t('apply'), t('cancel')))) return;
+  data.adjAll = Object.keys(cur).length ? cur : null; Object.values(data.images).forEach(r => delete r.adj); applyAdj(); scheduleSave();
+});
+$('adjResetAll').addEventListener('click', async () => {
+  openDD(null, false);
+  if (!(await ask(t('adjResetAllQ'), t('adjResetAllD'), t('adjReset'), t('cancel')))) return;
+  data.adjAll = null; Object.values(data.images).forEach(r => delete r.adj); applyAdj(); scheduleSave();
+});
+// roue crantée en pixel art (9 × 9)
+$('btnAdj').innerHTML = '<svg viewBox="0 0 9 9" aria-hidden="true">' + ['...#.#...', '.#.###.#.', '..#####..', '####.####', '.##...##.', '####.####', '..#####..', '.#.###.#.', '...#.#...']
+  .map((row, y) => [...row].map((c, x) => c === '#' ? '<rect x="' + x + '" y="' + y + '" width="1" height="1" fill="currentColor"/>' : '').join('')).join('') + '</svg>';
+function openAdj(on){ $('adjPanel').hidden = !on; $('btnAdj').setAttribute('aria-expanded', String(on)); }
+$('btnAdj').addEventListener('click', e => { e.stopPropagation(); openAdj($('adjPanel').hidden); });
+document.addEventListener('pointerdown', e => { if (!$('adjPanel').hidden && !e.target.closest('.imgadj')) openAdj(false); });
+document.addEventListener('keydown', e => { if (e.key === 'Escape') openAdj(false); });
 $('btnPrev').addEventListener('click', () => step(-1));
 $('btnNext').addEventListener('click', () => step(1));
 $('cHideIgn').addEventListener('change', e => { S.hideIgn = e.target.checked; e.target.blur(); saveS(); revealRow(); });
@@ -746,7 +817,7 @@ function zoomAt(f, cx, cy){
 }
 const screenEl = $('screen');
 screenEl.addEventListener('wheel', e => {
-  if (idx < 0) return; e.preventDefault();
+  if (idx < 0 || e.target.closest('.imgadj')) return; e.preventDefault();
   const b = screenEl.getBoundingClientRect(); zoomAt(Math.exp(-e.deltaY * .0015), e.clientX - b.left, e.clientY - b.top);
 }, { passive:false });
 $('zIn').addEventListener('click', () => zoomAt(1.5, screenEl.clientWidth/2, screenEl.clientHeight/2));
@@ -757,7 +828,8 @@ window.addEventListener('resize', () => { if (idx >= 0) fit(); });
 // au doigt (écran tactile) : toucher pour compter, glisser pour déplacer
 let drag = null;
 screenEl.addEventListener('pointerdown', e => {
-  if (idx < 0 || e.target.closest('.zoombar, .platebar, .empty')) return; // clic sur un bouton posé sur l'image : pas une colonie
+  if (idx < 0 || e.target.closest('.zoombar, .platebar, .imgadj, .empty')) return;
+  if (!$('adjPanel').hidden){ openAdj(false); return; } // un clic sur l'image ferme d'abord le panneau d'affichage, sans poser de colonie // clic sur un bouton posé sur l'image : pas une colonie
   if (e.button !== 0 && e.button !== 2) return;
   if (adjusting && e.button === 0){ // réglage des cercles : bord = taille, intérieur = position
     const b = screenEl.getBoundingClientRect(), s = base*zoom, px = (e.clientX - b.left - tx) / s, py = (e.clientY - b.top - ty) / s;
@@ -1162,7 +1234,7 @@ function revealRow(){
 }
 function renderAll(){
   const r = rec();
-  renderNav();
+  renderNav(); applyAdj();
   const nIgn = files.filter(imgIgnored).length; $('cHideIgn').checked = S.hideIgn;
   $('hideIgnLbl').textContent = t('hideIgn') + (nIgn ? ' (' + nIgn + ')' : '');
   $('count').textContent = !r ? 0 : dbl() ? countOf(r, 0) + ' · ' + countOf(r, 1) : r.marks.length; // mode 2 boîtes : boîte 1 · boîte 2
